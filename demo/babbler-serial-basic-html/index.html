@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Babbler device control panel</title>
+    <meta charset="UTF-8"/>
+    <script type="text/javascript" src="../../script/babbler.js"></script>
+    
+    <style>
+      h1 {
+        font-size: 14pt;
+      }
+    </style>
+    
+    <script type="text/javascript">
+      var babblerDevice = new BabblerDevice(
+          function onStatusChange(status) {
+              if(status === BBLR_STATUS_DISCONNECTED) {
+                  document.getElementById('bblr-serial-disconnected-pnl').style.display = "block";
+                  document.getElementById('bblr-serial-connecting-pnl').style.display = "none";
+                  document.getElementById('bblr-serial-connected-pnl').style.display = "none";
+              } else if(status === BBLR_STATUS_CONNECTING) {
+                  document.getElementById('bblr-serial-disconnected-pnl').style.display = "none";
+                  document.getElementById('bblr-serial-connecting-pnl').style.display = "block";
+                  document.getElementById('bblr-serial-connected-pnl').style.display = "none";
+              } else if(status === BBLR_STATUS_CONNECTED) {
+                  document.getElementById('bblr-serial-disconnected-pnl').style.display = "none";
+                  document.getElementById('bblr-serial-connecting-pnl').style.display = "none";
+                  document.getElementById('bblr-serial-connected-pnl').style.display = "block";
+              }
+          
+          
+              document.getElementById('device_status').innerHTML = status;
+              if(status === BBLR_STATUS_DISCONNECTED && babblerDevice.deviceError() != undefined) {
+                  document.getElementById('device_status').innerHTML += " (" + babblerDevice.deviceError() + ")";
+              }
+          }
+      );
+    
+    
+      function writeLog(msg) {
+          var logElement = document.getElementById("serial_read_data");
+          logElement.innerHTML += msg + "<br>";
+          logElement.scrollTop = logElement.scrollHeight;
+      }
+      
+      function clearLog() {
+          var logElement = document.getElementById("serial_read_data");
+          logElement.innerHTML = "";
+      }
+    
+      /**
+       * Обновить список последовательных портов
+       */
+      function updateSerialPortList() {
+          var SerialPort = require('serialport');
+        
+	        var combo = document.getElementById("serial_ports");
+	        combo.options.length = 0;
+	
+          SerialPort.list(function (err, ports) {
+              ports.forEach(function(port) {
+                  console.log(port.comName);
+                  console.log(port.pnpId);
+                  console.log(port.manufacturer);
+                  
+                  var option = document.createElement("option");
+	                option.text = port.comName;
+	                option.value = port.comName;
+	                combo.add(option, null);
+              });
+          });
+      }
+      
+      function cmdPing() {
+          babblerDevice.sendCmd("ping", [],
+              // onReply
+              function(cmd, id, reply) {
+                  document.getElementById('serial_read_data').innerHTML += cmd + ", id=" + id + ': ' + reply + "\n";
+              },
+              // onError
+              function(cmd, msg) {
+                  document.getElementById('serial_read_data').innerHTML += cmd + ": " + msg + "\n";
+                  console.log(cmd + ": " + msg);
+              }
+          );
+      }
+      
+      function cmdHelp(param) {
+          var params;
+          if(param != undefined) {
+              params = [param];
+          } else {
+              params = [];
+          }
+          babblerDevice.sendCmd("help", params,
+              // onReply
+              function(cmd, id, data) {
+                  document.getElementById('serial_read_data').innerHTML += cmd + ", id=" + id + ': ' + data + "\n";
+              },
+              // onError
+              function(cmd, msg) {
+                  document.getElementById('serial_read_data').innerHTML += cmd + ": " + msg + "\n";
+                  console.log(cmd + ": " + msg);
+              }
+          );
+      }
+      
+      
+      function connect() {
+          babblerDevice.connect(document.getElementById('serial_ports').value, 
+              onData = function(data) {
+                  console.log(data);
+              },
+              onDataParseError = function(data, error) {
+                  console.log("error here: " + error);
+              }
+          );
+      }
+
+    </script>
+  </head>
+  <body>
+    <div class="bblr-serial-connect-widget">
+        <div id="bblr-serial-disconnected-pnl">
+          <a href="javascript:connect()">Подключиться</a>
+          
+          устройство: <select name="serial_ports" id="serial_ports"></select> 
+          <a href="javascript:updateSerialPortList()">обновить</a>
+        </div>
+        <div id="bblr-serial-connecting-pnl" style="display: none">
+          <a href="javascript:babblerDevice.disconnect()">Отмена</a>
+          
+          подключаем...
+        </div>
+        <div id="bblr-serial-connected-pnl" style="display: none">
+          <a href="javascript:babblerDevice.disconnect()">Отключиться</a>
+        </div>
+    </div>
+    
+    <div>
+        Статус: <span id="device_status">disconnected</span>
+    </div>
+    
+    <div>
+    <a href="javascript:cmdPing()">проверка</a>
+    </div>
+    
+    <div>
+    <a href="javascript:cmdHelp('--list')">помощь</a>
+    </div>
+    
+    <div>
+    <pre id="serial_read_data">
+    </div>
+  </body>
+</html>
+

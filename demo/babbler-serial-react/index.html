@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8"/>
+    <title>Babbler device control panel</title>
+    
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons"
+      rel="stylesheet">
+
+    <!-- Для поддержки тегов script с параметром type="text/babel" -->
+    <script src="https://unpkg.com/babel-core@5.8.38/browser.min.js"></script>
+    
+    <script type="text/javascript" src="../../script/babbler.js"></script>
+    
+    <script type="text/babel">
+        // install babel hooks in the renderer process
+        require('babel-register');
+        
+        // Needed for onTouchTap (warning to go away)
+        import injectTapEventPlugin from 'react-tap-event-plugin';
+        injectTapEventPlugin();
+    
+        // компоненты, использующие синтаксис JSX/es2015/react/stage-1, нужно загружать
+        // через вызов require, тег script будет показывать ошибки синтаксиса,
+        // хотя для других скриптов, которые используют обычный синтаксис JavaScript,
+        // подойдут оба варианта
+        require('./react-app-ui.js');
+    </script>
+    
+  </head>
+  <body>
+  
+    <div id="app-content"></div>
+    
+  </body>
+</html>
+
