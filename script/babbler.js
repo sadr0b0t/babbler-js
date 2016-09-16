@@ -7,6 +7,11 @@ const BBLR_STATUS_DISCONNECTED = "disconnected";
 const BBLR_STATUS_CONNECTING = "connecting";
 const BBLR_STATUS_CONNECTED = "connected";
 
+/** Направление потока данных: in (с устройства) */
+const BBLR_DATA_FLOW_IN = "in";
+/** Направление потока данных: out (на устройство) */
+const BBLR_DATA_FLOW_OUT = "out";
+
 /** Ошибка команды: таймаут */
 const BBLR_ERROR_REPLY_TIMEOUT = "Reply timeout";
 /** Ошибка команды: устройство отключено в процессе выполненияы */
@@ -19,6 +24,7 @@ const BBLR_ERROR_INVALID_PORT_NAME = "Invalid port name"
 
 /** Команда ping */
 const BBLR_CMD_PING = "ping";
+
 
 /**
  * Создать экземпляр устройства - плата с прошивкой на основе библиотеки Babbler_h, 
@@ -41,11 +47,30 @@ function BabblerDevice(onStatusChange) {
     
     ///////////////////////////////////////////
     // Слушатели событий
-    /** Колбэки для реакции на изменение статуса устройства */
+    /** 
+     * Обратные вызовы для реакции на изменение статуса устройства.
+     * 
+     * onStatusChange: function(status)
+     *     @param status - статус подключения: disconnected, connecting, connected 
+     */
     var _onStatusChange = [onStatusChange];
-    /** Колбэки для реакции на пришедшие данные */
+    /** 
+     * Обратные вызовы для реакции на пришедшие данные.
+     *
+     * onData: function(data, dir)
+     *     @param data - пакет данных от устройства
+     *     @param dir - направление: 
+     *         in (данные пришли с устройства), 
+     *         out (данные отправлены на устройство)
+     */
     var _onData = [];
-    /** Колбэки для реакции на ошибки разбора пришедших пакетов данных */
+    /** 
+     * Обратные вызовы для реакции на ошибки разбора пришедших пакетов данных
+     *
+     * onDataParseError: function(data, error)
+     *     @param data - пакет данных от устройства
+     *     @param error - сообщение об ошибке
+     */
     var _onDataParseError = [];
     
     
@@ -143,13 +168,13 @@ function BabblerDevice(onStatusChange) {
     }
     
     /**
-     * Известить слушателей о пришедших данных.
+     * Известить слушателей о полученных или отправленных данных.
      */
-    var _fireOnData = function(data) {
+    var _fireOnData = function(data, dir) {
         for(var i in _onData) {
             var onData = _onData[i];
             if(onData != undefined) {
-                onData(data);
+                onData(data, dir);
             }
         }
     }
@@ -258,7 +283,7 @@ function BabblerDevice(onStatusChange) {
                 onData(data);
             }
             // и всех остальных
-            _fireOnData(data);
+            _fireOnData(data, BBLR_DATA_FLOW_IN);
             
             // ожидаем строку в формате JSON вида
             // {"cmd": "cmd_name", "id": "cmd_id", "reply": "reply_value"}
@@ -386,14 +411,17 @@ function BabblerDevice(onStatusChange) {
             });
                         
             // пишем данные здесь, результат получаем в колбэке на событие data
-            port.write(
-                JSON.stringify({
+            var data = JSON.stringify({
                     cmd: cmd,
                     id: cmdId.toString(),
                     params: params
-                }), 
+                })
+            port.write(data,
                 function(err) {
-                    if(err) {
+                    if(!err) {
+                        // данные ушли ок
+                        _fireOnData(data, BBLR_DATA_FLOW_OUT);
+                    } else {
                         // ошибка записи в порт - отключаемся
                         // (например, порт открыт, но не хватает прав на запись) 
                         _disconnect("Error writing to port: " + err);
@@ -491,8 +519,9 @@ function BabblerDevice(onStatusChange) {
     
     /** 
      * Добавить слушателя событий статуса устройства
-     * @param onStatusChange
-     *     параметры: status - статус подключения: disconnected, connecting, connected 
+     * 
+     * onStatusChange: function(status)
+     *     @param status - статус подключения: disconnected, connecting, connected 
      */
     this.addOnStatusChangeListener = function(onStatusChange) {
         if(onStatusChange != undefined) {
@@ -512,8 +541,12 @@ function BabblerDevice(onStatusChange) {
     
     /** 
      * Добавить слушателя входящих данных
-     * @param onData
-     *     параметры: data - пакет данных от устройства
+     * 
+     * onData: function(data, dir)
+     *     @param data - пакет данных от устройства
+     *     @param dir - направление: 
+     *         in (данные пришли с устройства), 
+     *         out (данные отправлены на устройство)
      */
     this.addOnDataListener = function(onData) {
         if(onData != undefined) {
@@ -533,9 +566,10 @@ function BabblerDevice(onStatusChange) {
     
     /** 
      * Добавить слушателя ошибок разбора входящих данных
-     * @param onDataParseError
-     *     параметры: data - пакет данных от устройства
-     *                error - сообщение об ошибке
+     *
+     * onDataParseError: function(data, error)
+     *     @param data - пакет данных от устройства
+     *     @param error - сообщение об ошибке
      */
     this.addOnDataParseErrorListener = function(onDataParseError) {
         if(onDataParseError != undefined) {
