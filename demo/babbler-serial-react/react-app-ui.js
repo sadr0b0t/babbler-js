@@ -20,6 +20,9 @@ import Subheader from 'material-ui/Subheader';
 import BabblerConnectionStatusIcon from '../../react-components/material-ui/BabblerConnectionStatusIcon';
 import BabblerConnectionErrorSnackbar from '../../react-components/material-ui/BabblerConnectionErrorSnackbar';
 import BabblerConnectionPanel from '../../react-components/material-ui/BabblerConnectionPanel';
+import BabblerDataFlow from '../../react-components/material-ui/BabblerDataFlow';
+
+var createFragment = require('react-addons-create-fragment');
 
 const btnStyle = {
   margin: 12
@@ -51,15 +54,20 @@ var BabblerActions = React.createClass({
     render: function() {
         var connected = this.state.deviceStatus === BBLR_STATUS_CONNECTED ? true : false;
         return (
-            <div>
+            <div style={{overflowY: "auto", height: 500}}>
                 <div>
                     <RaisedButton label="ping" onClick={this.cmdPing} disabled={!connected} style={btnStyle} />
                     <RaisedButton label="help" onClick={this.cmdHelp} disabled={!connected} style={btnStyle} />
                 </div>
                 <Subheader>Ответ</Subheader>
-                <div>{this.state.reply}</div>
-                <Subheader>Ошибки</Subheader>
-                <div>{this.state.error}</div>
+                <div style={{minHeight: 26, fontSize: 24, marginLeft: 45}}>{this.state.reply}</div>
+                <Subheader>Ошибка</Subheader>
+                <div style={{minHeight: 18, marginLeft: 45, color: red200}}>{this.state.error}</div>
+                <Subheader>Данные</Subheader>
+                <BabblerDataFlow
+                    babblerDevice={this.props.babblerDevice} 
+                    reverseOrder={true}
+                    style={{margin: 20}}/>
             </div>
         );
     },
@@ -108,18 +116,6 @@ var BabblerActionsLeds = React.createClass({
             this.setState({deviceStatus: status});
         }.bind(this);
         this.props.babblerDevice.addOnStatusChangeListener(this.babblerDeviceListener);
-        
-        // слушаем данные от устройства
-        this.dataListener = function onData(data) {
-            console.log(data);
-        }.bind(this);
-        this.props.babblerDevice.addOnDataListener(this.dataListener);
-        
-        // слушаем ошибки разбора данных устройства
-        this.dataParseErrorListener = function(data, error) {
-            console.log("error here: " + error);
-        }.bind(this);
-        this.props.babblerDevice.addOnDataParseErrorListener(this.dataParseErrorListener);
     },
     
     componentWillUnmount: function() {
@@ -190,14 +186,17 @@ ReactDOM.render(
         <Divider style={{marginTop: 20, marginBottom: 20}}/>
         
         <Tabs>
-            <Tab label="Отладка" >
-                <BabblerActions babblerDevice={babblerDevice1}/>
-                <div>
-                    <pre id="serial_read_data"/>
-                </div>
-            </Tab>
             <Tab label="Лампочки" >
                 <BabblerActionsLeds babblerDevice={babblerDevice1}/>
+            </Tab>
+            <Tab label="Отладка" >
+                <BabblerActions babblerDevice={babblerDevice1}/>
+            </Tab>
+            <Tab label="Лог" >
+                <BabblerDataFlow 
+                    babblerDevice={babblerDevice1} 
+                    reverseOrder={true}
+                    style={{margin: 20}}/>
             </Tab>
         </Tabs>
         
