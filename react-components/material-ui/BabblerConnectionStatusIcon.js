@@ -33,7 +33,7 @@ var BabblerConnectionStatusIcon = React.createClass({
     },
     
     /** выбран другой порт в списке */
-    handlePortNameChange: function(value) { 
+    handlePortNameChange: function(value) {
         this.setState({portName: value});
     },
     
