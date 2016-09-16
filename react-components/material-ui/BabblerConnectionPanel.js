@@ -17,13 +17,13 @@ var BabblerConnectionPanel = React.createClass({
     getInitialState: function() {
         return {
             deviceStatus: this.props.babblerDevice.deviceStatus(),
-            portName: ""
+            portName: this.props.babblerDevice.deviceName()
         };
     },
     componentDidMount: function() {
         // слушаем статус устройства
         this.babblerDeviceListener = function onStatusChange(status) {
-            this.setState({deviceStatus: status});
+            this.setState({deviceStatus: status, portName: this.props.babblerDevice.deviceName()});
         }.bind(this);
         this.props.babblerDevice.addOnStatusChangeListener(this.babblerDeviceListener);
     },
