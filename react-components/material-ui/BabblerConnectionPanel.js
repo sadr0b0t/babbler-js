@@ -21,6 +21,7 @@ var BabblerConnectionPanel = React.createClass({
         };
     },
     componentDidMount: function() {
+        // слушаем статус устройства
         this.babblerDeviceListener = function onStatusChange(status) {
             this.setState({deviceStatus: status});
         }.bind(this);
@@ -28,6 +29,7 @@ var BabblerConnectionPanel = React.createClass({
     },
     
     componentWillUnmount: function() {
+        // почистим слушателей
         this.props.babblerDevice.removeOnStatusChangeListener(this.babblerDeviceListener);
     },
     
