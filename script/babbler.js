@@ -40,6 +40,12 @@ function BabblerDevice(onStatusChange) {
     
     ///////////////////////////////////////////
     // Статус
+    
+    /** 
+     * Имя устройства, к которому были последний раз 
+     * подключены или пытались подключиться.
+     */
+    var _deviceName = undefined;
     /** Статус подалкючения к устройству */
     var _deviceStatus = BBLR_STATUS_DISCONNECTED;
     /** Значение ошибки на случай неудачного подключения */
@@ -198,10 +204,12 @@ function BabblerDevice(onStatusChange) {
         // не будем подключаться, если уже подключены
         if(_deviceStatus !== BBLR_STATUS_DISCONNECTED) return;
         
+        _deviceName = portName;
+        
         // подключаемся
         _setDeviceStatus(BBLR_STATUS_CONNECTING);
     
-        // некорректное имя порта - засчитаем попытку подключения с ошибкой
+        // некорректное имя порта - засчитаем попытку подключения с ошибкой.
         // проверка на пустую строку: true, если undefined, null, 0, "", " ")
         // http://stackoverflow.com/questions/5515310/is-there-a-standard-function-to-check-for-null-undefined-or-blank-variables-in/21732631#21732631
         if((portName ? portName.trim().length == 0 : true)) {
@@ -499,6 +507,14 @@ function BabblerDevice(onStatusChange) {
     
     ///////////////////////////////////////////
     // Статус устройства на публику
+    
+    /** 
+     * Имя устройства, к которому были последний раз 
+     * подключены или пытались подключиться.
+     */
+    this.deviceName = function() {
+        return _deviceName;
+    }
     
     /**
      * Текущий статус устройства: не подключено, подключаемся, подключено.
