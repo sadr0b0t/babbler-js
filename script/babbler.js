@@ -32,13 +32,25 @@ const BBLR_CMD_PING = "ping";
 function BabblerDevice(onStatusChange) {
     //http://phrogz.net/js/classes/OOPinJS.html
     
+    ///////////////////////////////////////////
+    // Статус
     /** Статус подалкючения к устройству */
     var _deviceStatus = BBLR_STATUS_DISCONNECTED;
     /** Значение ошибки на случай неудачного подключения */
     var _deviceError = undefined;
     
+    ///////////////////////////////////////////
+    // Слушатели событий
+    /** Колбэки для реакции на изменение статуса устройства */
     var _onStatusChange = [onStatusChange];
-
+    /** Колбэки для реакции на пришедшие данные */
+    var _onData = [];
+    /** Колбэки для реакции на ошибки разбора пришедших пакетов данных */
+    var _onDataParseError = [];
+    
+    
+    ///////////////////////////////////////////
+    // Внутренняя кухня
     /** Последовательный порт */
     var port = undefined;
     
@@ -67,6 +79,9 @@ function BabblerDevice(onStatusChange) {
     
     /** проверять статус устройства раз в 5 секунд */
     var checkAliveIntId;
+    
+    ///////////////////////////////////////////
+    // Всякие методы
     
     /**
      * Вычистить колбэки, которые ожидают в очереди дольше установленного таймаута
@@ -116,6 +131,8 @@ function BabblerDevice(onStatusChange) {
         _deviceError = error;
         if(_deviceStatus != status) {
             _deviceStatus = status;
+            
+            // известим слушателей
             for(var i in _onStatusChange) {
                 var onStatusChange = _onStatusChange[i];
                 if(onStatusChange != undefined) {
@@ -125,24 +142,27 @@ function BabblerDevice(onStatusChange) {
         }
     }
     
-   /** 
-    * Добавить слушателя событий устройства
-    * @param onStatusChange
-    *     параметры: status - статус подключения: disconnected, connecting, connected 
-    */
-    this.addOnStatusChangeListener = function(onStatusChange) {
-        if(onStatusChange != undefined) {
-            _onStatusChange.push(onStatusChange);
+    /**
+     * Известить слушателей о пришедших данных.
+     */
+    var _fireOnData = function(data) {
+        for(var i in _onData) {
+            var onData = _onData[i];
+            if(onData != undefined) {
+                onData(data);
+            }
         }
     }
     
-   /** 
-    * Удалить слушателя событий устройства
-    */
-    this.removeOnStatusChangeListener = function(onStatusChange) {
-        var index = _onStatusChange.indexOf(onStatusChange);
-        if(index != -1) {
-            _onStatusChange.splice(index, 1);
+    /**
+     * Известить слушателей об ошибке разбора пакета пришедших данных.
+     */
+    var _fireOnDataParseError = function(data, error) {
+        for(var i in _onDataParseError) {
+            var onDataParseError = _onDataParseError[i];
+            if(onDataParseError != undefined) {
+                onDataParseError(data, error);
+            }
         }
     }
 
@@ -232,9 +252,13 @@ function BabblerDevice(onStatusChange) {
 
         // пришли данные
         port.on('data', function(data) {
+            // известим подписавшихся:
+            // отдельно персональный колбэк
             if(onData != undefined) {
                 onData(data);
             }
+            // и всех остальных
+            _fireOnData(data);
             
             // ожидаем строку в формате JSON вида
             // {"cmd": "cmd_name", "id": "cmd_id", "reply": "reply_value"}
@@ -243,9 +267,13 @@ function BabblerDevice(onStatusChange) {
                 // парсим строку в объект
                 cmdReply = JSON.parse(data);
             } catch(e) {
+                // известим подписавшихся об ошибке:
+                // отдельно персональный колбэк
                 if(onDataParseError != undefined) {
                     onDataParseError(data, e);
                 }
+                // и всех остальных
+                _fireOnDataParseError(data, e);
             }
             
             if(cmdReply != null) {
@@ -293,7 +321,7 @@ function BabblerDevice(onStatusChange) {
         _setDeviceStatus(BBLR_STATUS_DISCONNECTED, errorMsg);
         
         // дальше спокойно зачищаем ресурсы
-    
+        
         // останавливаем все таймеры
         if(validateIntId != undefined) {
             clearInterval(validateIntId);
@@ -441,6 +469,9 @@ function BabblerDevice(onStatusChange) {
      */
     this.sendCmd = _queueCmd;
     
+    ///////////////////////////////////////////
+    // Статус устройства на публику
+    
     /**
      * Текущий статус устройства: не подключено, подключаемся, подключено.
      */
@@ -453,6 +484,73 @@ function BabblerDevice(onStatusChange) {
      */
     this.deviceError = function() {
         return _deviceError;
+    }
+    
+    ///////////////////////////////////////////
+    // Слушатели событий
+    
+    /** 
+     * Добавить слушателя событий статуса устройства
+     * @param onStatusChange
+     *     параметры: status - статус подключения: disconnected, connecting, connected 
+     */
+    this.addOnStatusChangeListener = function(onStatusChange) {
+        if(onStatusChange != undefined) {
+            _onStatusChange.push(onStatusChange);
+        }
+    }
+    
+    /** 
+     * Удалить слушателя событий статуса устройства
+     */
+    this.removeOnStatusChangeListener = function(onStatusChange) {
+        var index = _onStatusChange.indexOf(onStatusChange);
+        if(index != -1) {
+            _onStatusChange.splice(index, 1);
+        }
+    }
+    
+    /** 
+     * Добавить слушателя входящих данных
+     * @param onData
+     *     параметры: data - пакет данных от устройства
+     */
+    this.addOnDataListener = function(onData) {
+        if(onData != undefined) {
+            _onData.push(onData);
+        }
+    }
+    
+    /** 
+     * Удалить слушателя входящих данных
+     */
+    this.removeOnDataListener = function(onData) {
+        var index = _onData.indexOf(onData);
+        if(index != -1) {
+            _onData.splice(index, 1);
+        }
+    }
+    
+    /** 
+     * Добавить слушателя ошибок разбора входящих данных
+     * @param onDataParseError
+     *     параметры: data - пакет данных от устройства
+     *                error - сообщение об ошибке
+     */
+    this.addOnDataParseErrorListener = function(onDataParseError) {
+        if(onDataParseError != undefined) {
+            _onDataParseError.push(onDataParseError);
+        }
+    }
+    
+    /** 
+     * Удалить слушателя ошибок разбора входящих данных
+     */
+    this.removeOnDataParseErrorListener = function(onDataParseError) {
+        var index = _onDataParseError.indexOf(onDataParseError);
+        if(index != -1) {
+            _onDataParseError.splice(index, 1);
+        }
     }
 }
 

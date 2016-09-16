@@ -79,19 +79,7 @@ var BabblerConnectionPanel = React.createClass({
 
     /** Подключиться к выбранному в списке устройству */
     connect: function() {
-        this.props.babblerDevice.connect(
-            // portName
-            this.state.portName,
-            
-            // onData
-            function(data) {
-                console.log(data);
-            },
-            // onDataParseError
-            function(data, error) {
-                console.log("error here: " + error);
-            }
-        );
+        this.props.babblerDevice.connect(this.state.portName);
     },
     
     /** Отключиться от устройства */

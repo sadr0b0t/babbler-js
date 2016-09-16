@@ -36,6 +36,7 @@ var BabblerActions = React.createClass({
     },
     
     componentDidMount: function() {
+        // слушаем статус устройства
         this.babblerDeviceListener = function onStatusChange(status) {
             this.setState({deviceStatus: status});
         }.bind(this);
@@ -43,6 +44,7 @@ var BabblerActions = React.createClass({
     },
     
     componentWillUnmount: function() {
+        // почистим слушателей
         this.props.babblerDevice.removeOnStatusChangeListener(this.babblerDeviceListener);
     },
     
@@ -101,13 +103,27 @@ var BabblerActionsLeds = React.createClass({
     },
     
     componentDidMount: function() {
+        // слушаем статус устройства
         this.babblerDeviceListener = function onStatusChange(status) {
             this.setState({deviceStatus: status});
         }.bind(this);
         this.props.babblerDevice.addOnStatusChangeListener(this.babblerDeviceListener);
+        
+        // слушаем данные от устройства
+        this.dataListener = function onData(data) {
+            console.log(data);
+        }.bind(this);
+        this.props.babblerDevice.addOnDataListener(this.dataListener);
+        
+        // слушаем ошибки разбора данных устройства
+        this.dataParseErrorListener = function(data, error) {
+            console.log("error here: " + error);
+        }.bind(this);
+        this.props.babblerDevice.addOnDataParseErrorListener(this.dataParseErrorListener);
     },
     
     componentWillUnmount: function() {
+        // почистим слушателей
         this.props.babblerDevice.removeOnStatusChangeListener(this.babblerDeviceListener);
     },
     
