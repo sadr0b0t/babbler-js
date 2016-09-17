@@ -56,6 +56,14 @@ function BabblerDevice(onStatusChange) {
     var _deviceStatus = BBLR_STATUS_DISCONNECTED;
     /** Значение ошибки на случай неудачного подключения */
     var _deviceError = undefined;
+    /** 
+     * Флаг таймаута: 
+     * true: устройство подключено, но не прислало ответ 
+     *     на последнюю команду вовремя
+     * false: устройство подключено, ответ на последнюю 
+     *     команду пришел во время 
+     */
+    var _deviceTimeoutFlag = false;
     
     ///////////////////////////////////////////
     // Слушатели событий
@@ -148,6 +156,8 @@ function BabblerDevice(onStatusChange) {
             _fireOnDataError(
                 JSON.stringify({cmd: callback.cmd, id: callback.id, params: callback.params}), 
                 BBLR_ERROR_REPLY_TIMEOUT, BBLR_DATA_FLOW_IN);
+            // выставим флаг таймаута, пока без события
+            _deviceTimeoutFlag = true;
         }
     }
     
@@ -331,6 +341,14 @@ function BabblerDevice(onStatusChange) {
                 for(var i in cmdReplyCallbackQueue) {
                     var callback = cmdReplyCallbackQueue[i];
                     if(callback.id == cmdReply.id) {
+                        // колбэк нашелся
+                        
+                        // значит устройство во-время прислало корректные данные
+                        // в ответ на отправленный запрос:
+                        // снимем флаг таймаута, пока без события
+                        _deviceTimeoutFlag = false;
+                        
+                        // убираем из очереди
                         cmdReplyCallbackQueue.splice(i, 1);
                         // отправим ответ тому, кто вопрошал
                         if(callback.onReply != undefined) {
@@ -579,6 +597,17 @@ function BabblerDevice(onStatusChange) {
      */
     this.deviceError = function() {
         return _deviceError;
+    }
+    
+    /** 
+     * Флаг таймаута: 
+     * true: устройство подключено, но не прислало ответ 
+     *     на последнюю команду вовремя
+     * false: устройство подключено, ответ на последнюю 
+     *     команду пришел во время 
+     */
+    this.deviceTimeoutFlag = function() {
+        return _deviceTimeout;
     }
     
     ///////////////////////////////////////////
