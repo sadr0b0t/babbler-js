@@ -2,7 +2,7 @@
 
 var React = require('react');
 
-import {red200, lime900, deepPurple900} from 'material-ui/styles/colors';
+import {red200, lime900, deepPurple900, yellow900} from 'material-ui/styles/colors';
 
 var BabblerDataFlow = React.createClass({
     getInitialState: function() {
@@ -21,8 +21,18 @@ var BabblerDataFlow = React.createClass({
         
         // слушаем данные от устройства
         this.dataListener = function onData(data, dir) {
-            var mark = (dir == BBLR_DATA_FLOW_IN ? "in>>" : "out<<");
-            var style = (dir == BBLR_DATA_FLOW_IN ? {color: deepPurple900} : {color: lime900});
+            var mark;
+            var style;
+            if(dir == BBLR_DATA_FLOW_IN) {
+                mark = "in>>";
+                style = {color: deepPurple900};
+            } else if(dir == BBLR_DATA_FLOW_OUT) {
+                mark = "out<<";
+                style = {color: lime900};
+            } else {//if(dir == BBLR_DATA_FLOW_QUEUE) {
+                mark = "queue<<";
+                style = {color: yellow900};
+            }
             
             var logElem =
                 <span key={this.state.dataFlow.length} style={style}>
