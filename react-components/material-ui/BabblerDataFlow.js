@@ -41,10 +41,13 @@ var BabblerDataFlow = React.createClass({
         this.props.babblerDevice.addOnDataListener(this.dataListener);
         
         // слушаем ошибки разбора данных устройства
-        this.dataParseErrorListener = function(data, error) {
+        this.dataErrorListener = function(data, error, dir) {
+            var mark = (dir == BBLR_DATA_FLOW_IN ? "err>>" : "err<<");
+            var style = {color: red200};
             var logElem = 
-                <span key={this.state.dataFlow.length} style={{color: red200}}>
-                    {error.toString()}<br/>
+                <span key={this.state.dataFlow.length} style={style}>
+                    {mark}{error.toString()}:<br/>
+                    <span style={{fontStyle: "italic"}}>{data.toString()}</span><br/>
                 </span>;
             if(!this.props.reverseOrder) {
                 // последнее событие в конец массива
@@ -56,14 +59,14 @@ var BabblerDataFlow = React.createClass({
             // перерисовать
             this.setState({dataFlow: this.state.dataFlow});
         }.bind(this);
-        this.props.babblerDevice.addOnDataParseErrorListener(this.dataParseErrorListener);
+        this.props.babblerDevice.addOnDataErrorListener(this.dataErrorListener);
     },
     
     componentWillUnmount: function() {
         // почистим слушателей
         this.props.babblerDevice.removeOnStatusChangeListener(this.babblerDeviceListener);
         this.props.babblerDevice.removeOnDataListener(this.dataListener);
-        this.props.babblerDevice.removeOnDataParseErrorListener(this.dataParseErrorListener);
+        this.props.babblerDevice.removeOnDataErrorListener(this.dataParseErrorListener);
     },
     
     render: function() {
