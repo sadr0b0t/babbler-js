@@ -65,8 +65,10 @@ var BabblerActions = React.createClass({
                 <div style={{minHeight: 18, marginLeft: 45, color: red200}}>{this.state.error}</div>
                 <Subheader>Данные</Subheader>
                 <BabblerDataFlow
-                    babblerDevice={this.props.babblerDevice} 
+                    babblerDevice={this.props.babblerDevice}
+                    maxItems={100}
                     reverseOrder={true}
+                    timestamp={true}
                     style={{margin: 20}}/>
             </div>
         );
@@ -196,6 +198,8 @@ ReactDOM.render(
                 <BabblerDataFlow 
                     babblerDevice={babblerDevice1} 
                     reverseOrder={true}
+                    maxItems={10000}
+                    timestamp={true}
                     style={{margin: 20}}/>
             </Tab>
         </Tabs>

@@ -19,6 +19,16 @@ var BabblerDataFlow = React.createClass({
         }.bind(this);
         this.props.babblerDevice.addOnStatusChangeListener(this.babblerDeviceListener);
         
+        // счетчик элементов, нужен для идентификатора элементов
+        this.itemKeyCounter = 0;
+        
+        function timestamp() {
+            var now = new Date();
+            return now.getFullYear() + "/" + now.getMonth() + "/" + now.getDay() + " " + 
+                now.getHours() + ":" + now.getMinutes() + ":" + now.getSeconds() + " " +
+                now.getMilliseconds();
+        }
+        
         // слушаем данные от устройства
         this.dataListener = function onData(data, dir) {
             var mark;
@@ -34,14 +44,25 @@ var BabblerDataFlow = React.createClass({
                 style = {color: yellow900};
             }
             
+            this.itemKeyCounter++;
             var logElem =
-                <span key={this.state.dataFlow.length} style={style}>
-                    {mark}{data}<br/>
+                <span key={this.itemKeyCounter} style={style}>
+                    {this.props.timestamp ? "[" + timestamp() + "] " : ""}{mark}{data}<br/>
                 </span>;
+                
             if(!this.props.reverseOrder) {
+                if(this.props.maxItems != undefined && this.state.dataFlow.length >= this.props.maxItems) {
+                    // удаляем самое старое событие из начала массива
+                    this.state.dataFlow.shift();
+                }
                 // последнее событие в конец массива
                 this.state.dataFlow.push(logElem);
             } else {
+                if(this.props.maxItems != undefined && this.state.dataFlow.length >= this.props.maxItems) {
+                    // удаляем самое старое событие из конца массива
+                    this.state.dataFlow.pop();
+                }
+            
                 // последнее событие в начало массива
                 this.state.dataFlow.splice(0, 0, logElem);
             }
@@ -54,9 +75,11 @@ var BabblerDataFlow = React.createClass({
         this.dataErrorListener = function(data, error, dir) {
             var mark = (dir == BBLR_DATA_FLOW_IN ? "err>>" : "err<<");
             var style = {color: red200};
+            
+            this.itemKeyCounter++;
             var logElem = 
-                <span key={this.state.dataFlow.length} style={style}>
-                    {mark}{error.toString()}:<br/>
+                <span key={this.itemKeyCounter} style={style}>
+                    {this.props.timestamp ? "[" + timestamp() + "] " : ""}{mark}{error.toString()}:<br/>
                     <span style={{fontStyle: "italic"}}>{data.toString()}</span><br/>
                 </span>;
             if(!this.props.reverseOrder) {
