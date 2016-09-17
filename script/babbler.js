@@ -11,6 +11,8 @@ const BBLR_STATUS_CONNECTED = "connected";
 const BBLR_DATA_FLOW_IN = "in";
 /** Направление потока данных: out (на устройство) */
 const BBLR_DATA_FLOW_OUT = "out";
+/** Направление потока данных: queue (добавлено в очередь на отправку) */
+const BBLR_DATA_FLOW_QUEUE = "queue";
 
 /** Ошибка команды: таймаут */
 const BBLR_ERROR_REPLY_TIMEOUT = "Reply timeout";
@@ -20,6 +22,8 @@ const BBLR_ERROR_DISCONNECTED_BEFORE = "Device disconnected before cmd was sent"
 const BBLR_ERROR_DISCONNECTED_AFTER = "Device disconnected after cmd was sent";
 /** Ошибка команды: устройство не подключено */
 const BBLR_ERROR_DEVICE_NOT_CONNECTED = "Device not connected"
+/** Ошибка команды: ошибка записи в порт */
+const BBLR_ERROR_WRITING_TO_PORT = "Error writing to port"
 
 /** Неправильное имя порта устройства */
 const BBLR_ERROR_INVALID_PORT_NAME = "Invalid port name"
@@ -137,11 +141,13 @@ function BabblerDevice(onStatusChange) {
         }
         for(var i in toRemove) {
             var callback = toRemove[i];
-            cmdReplyCallbackQueue.splice(cmdReplyCallbackQueue.indexOf(callback), 1);1
+            cmdReplyCallbackQueue.splice(cmdReplyCallbackQueue.indexOf(callback), 1);
             // известим отправившего команду
             callback.onError(callback.cmd, BBLR_ERROR_REPLY_TIMEOUT);
-            // остальных тоже известим, т.к. был контак с устройством и мы ждем ответа
-            _fireOnDataError(callback.cmd, BBLR_ERROR_REPLY_TIMEOUT, BBLR_DATA_FLOW_OUT);
+            // остальных тоже известим, что ответа не дождались
+            _fireOnDataError(
+                JSON.stringify({cmd: callback.cmd, id: callback.id, params: callback.params}), 
+                BBLR_ERROR_REPLY_TIMEOUT, BBLR_DATA_FLOW_IN);
         }
     }
     
@@ -385,8 +391,10 @@ function BabblerDevice(onStatusChange) {
             var callback = cmdReplyCallbackQueue[i];
             // извещаем отправившего команду
             callback.onError(callback.cmd, BBLR_ERROR_DISCONNECTED_AFTER);
-            // остальных тоже известим
-            _fireOnDataError(callback.cmd, BBLR_ERROR_DISCONNECTED_AFTER, BBLR_DATA_FLOW_OUT);
+            // остальных тоже известим, что ответа не дождемся
+            _fireOnDataError(
+                JSON.stringify({cmd: callback.cmd, id: callback.id, params: callback.params}), 
+                BBLR_ERROR_DISCONNECTED_AFTER, BBLR_DATA_FLOW_IN);
         }
         cmdReplyCallbackQueue = [];
         
@@ -396,8 +404,10 @@ function BabblerDevice(onStatusChange) {
             var cmd = cmdQueue[i];
             // извещаем отправившего команду
             cmd.onError(cmd.cmd, BBLR_ERROR_DISCONNECTED_BEFORE);
-            // остальных тоже известим
-            _fireOnDataError(cmd.cmd, BBLR_ERROR_DISCONNECTED_BEFORE, BBLR_DATA_FLOW_OUT);
+            // остальных тоже известим, что команда так и не ушла из очереди
+            _fireOnDataError(
+                JSON.stringify({cmd: cmd.cmd, params: cmd.params}), 
+                BBLR_ERROR_DISCONNECTED_BEFORE, BBLR_DATA_FLOW_QUEUE);
         }
         cmdQueue = [];
         
@@ -449,9 +459,9 @@ function BabblerDevice(onStatusChange) {
                     } else {
                         // ошибка записи в порт 
                         // (например, порт открыт, но не хватает прав на запись)
-                        _fireOnDataError(data, err, BBLR_DATA_FLOW_OUT);
+                        _fireOnDataError(data, BBLR_ERROR_WRITING_TO_PORT + ": " + err, BBLR_DATA_FLOW_OUT);
                         // отключаемся
-                        _disconnect("Error writing to port: " + err);
+                        _disconnect(BBLR_ERROR_WRITING_TO_PORT + ": " + err);
                         // персональная ошибка в onError прилетит из _disconnect
                         //onError(cmd, "Error writing to port: " + err);
                     }
@@ -460,7 +470,7 @@ function BabblerDevice(onStatusChange) {
         } else {
             // порт вообще-то не открыт или устройство отключено
             // (вообще, это не должно произойти, т.к. мы ловим событие port 'disconnect')
-            _fireOnDataError(data, err, BBLR_DATA_FLOW_OUT);
+            _fireOnDataError(data, BBLR_ERROR_NOT_CONNECTED, BBLR_DATA_FLOW_OUT);
             // отключаемся
             _disconnect(BBLR_ERROR_NOT_CONNECTED);
             // персональная ошибка в onError прилетит из _disconnect
@@ -480,8 +490,12 @@ function BabblerDevice(onStatusChange) {
                 onReply: onReply,
                 onError: onError
             });
+            // добавили пакет в очередь
+            _fireOnData(JSON.stringify({cmd: cmd, params: params}), BBLR_DATA_FLOW_QUEUE);
         } else {
             onError(cmd, BBLR_ERROR_NOT_CONNECTED);
+            // пакет не добавляется в очередь
+            _fireOnData(JSON.stringify({cmd: cmd, params: params}), BBLR_ERROR_NOT_CONNECTED, BBLR_DATA_FLOW_QUEUE);
         }
     }
     
