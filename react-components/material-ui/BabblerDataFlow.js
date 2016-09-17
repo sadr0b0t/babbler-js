@@ -31,66 +31,94 @@ var BabblerDataFlow = React.createClass({
         
         // слушаем данные от устройства
         this.dataListener = function onData(data, dir) {
-            var mark;
-            var style;
-            if(dir == BBLR_DATA_FLOW_IN) {
-                mark = "in>>";
-                style = {color: deepPurple900};
-            } else if(dir == BBLR_DATA_FLOW_OUT) {
-                mark = "out<<";
-                style = {color: lime900};
-            } else {//if(dir == BBLR_DATA_FLOW_QUEUE) {
-                mark = "queue<<";
-                style = {color: yellow900};
+            var skip = false;
+            // посмотрим фильтры, разрешено все, что явно не запрещено
+            if(this.props.filter != undefined && this.props.filter.data != undefined) {
+                // задан фильтр по ошибкам, посмотрим, есть чего запрещенного
+                if( (this.props.filter.data === false) ||
+                    (dir == BBLR_DATA_FLOW_IN && this.props.filter.data.in === false) ||
+                    (dir == BBLR_DATA_FLOW_OUT && this.props.filter.data.out === false) ||
+                    (dir == BBLR_DATA_FLOW_QUEUE && this.props.filter.data.queue === false) ) {
+                    skip = true;
+                }
             }
             
-            this.itemKeyCounter++;
-            var logElem =
-                <span key={this.itemKeyCounter} style={style}>
-                    {this.props.timestamp ? "[" + timestamp() + "] " : ""}{mark}{data}<br/>
-                </span>;
+            if(!skip) {
+                var mark;
+                var style;
+                if(dir == BBLR_DATA_FLOW_IN) {
+                    mark = "in>>";
+                    style = {color: deepPurple900};
+                } else if(dir == BBLR_DATA_FLOW_OUT) {
+                    mark = "out<<";
+                    style = {color: lime900};
+                } else {//if(dir == BBLR_DATA_FLOW_QUEUE) {
+                    mark = "queue<<";
+                    style = {color: yellow900};
+                }
                 
-            if(!this.props.reverseOrder) {
-                if(this.props.maxItems != undefined && this.state.dataFlow.length >= this.props.maxItems) {
-                    // удаляем самое старое событие из начала массива
-                    this.state.dataFlow.shift();
+                this.itemKeyCounter++;
+                var logElem =
+                    <span key={this.itemKeyCounter} style={style}>
+                        {this.props.timestamp ? "[" + timestamp() + "] " : ""}{mark}{data}<br/>
+                    </span>;
+                    
+                if(!this.props.reverseOrder) {
+                    if(this.props.maxItems != undefined && this.state.dataFlow.length >= this.props.maxItems) {
+                        // удаляем самое старое событие из начала массива
+                        this.state.dataFlow.shift();
+                    }
+                    // последнее событие в конец массива
+                    this.state.dataFlow.push(logElem);
+                } else {
+                    if(this.props.maxItems != undefined && this.state.dataFlow.length >= this.props.maxItems) {
+                        // удаляем самое старое событие из конца массива
+                        this.state.dataFlow.pop();
+                    }
+                
+                    // последнее событие в начало массива
+                    this.state.dataFlow.splice(0, 0, logElem);
                 }
-                // последнее событие в конец массива
-                this.state.dataFlow.push(logElem);
-            } else {
-                if(this.props.maxItems != undefined && this.state.dataFlow.length >= this.props.maxItems) {
-                    // удаляем самое старое событие из конца массива
-                    this.state.dataFlow.pop();
-                }
-            
-                // последнее событие в начало массива
-                this.state.dataFlow.splice(0, 0, logElem);
+                // перерисовать
+                this.setState({dataFlow: this.state.dataFlow});
             }
-            // перерисовать
-            this.setState({dataFlow: this.state.dataFlow});
         }.bind(this);
         this.props.babblerDevice.addOnDataListener(this.dataListener);
         
         // слушаем ошибки разбора данных устройства
         this.dataErrorListener = function(data, error, dir) {
-            var mark = (dir == BBLR_DATA_FLOW_IN ? "err>>" : "err<<");
-            var style = {color: red200};
-            
-            this.itemKeyCounter++;
-            var logElem = 
-                <span key={this.itemKeyCounter} style={style}>
-                    {this.props.timestamp ? "[" + timestamp() + "] " : ""}{mark}{error.toString()}:<br/>
-                    <span style={{fontStyle: "italic"}}>{data.toString()}</span><br/>
-                </span>;
-            if(!this.props.reverseOrder) {
-                // последнее событие в конец массива
-                this.state.dataFlow.push(logElem);
-            } else {
-                // последнее событие в начало массива
-                this.state.dataFlow.splice(0, 0, logElem);
+            var skip = false;
+            // посмотрим фильтры, разрешено все, что явно не запрещено
+            if(this.props.filter != undefined && this.props.filter.err != undefined) {
+                // задан фильтр по ошибкам, посмотрим, есть чего запрещенного
+                if( (this.props.filter.err === false) ||
+                    (dir == BBLR_DATA_FLOW_IN && this.props.filter.err.in === false) ||
+                    (dir == BBLR_DATA_FLOW_OUT && this.props.filter.err.out === false) ||
+                    (dir == BBLR_DATA_FLOW_QUEUE && this.props.filter.err.queue === false) ) {
+                    skip = true;
+                }
             }
-            // перерисовать
-            this.setState({dataFlow: this.state.dataFlow});
+            
+            if(!skip) {
+                var mark = (dir == BBLR_DATA_FLOW_IN ? "err>>" : "err<<");
+                var style = {color: red200};
+                
+                this.itemKeyCounter++;
+                var logElem = 
+                    <span key={this.itemKeyCounter} style={style}>
+                        {this.props.timestamp ? "[" + timestamp() + "] " : ""}{mark}{error.toString()}:<br/>
+                        <span style={{fontStyle: "italic"}}>{data.toString()}</span><br/>
+                    </span>;
+                if(!this.props.reverseOrder) {
+                    // последнее событие в конец массива
+                    this.state.dataFlow.push(logElem);
+                } else {
+                    // последнее событие в начало массива
+                    this.state.dataFlow.splice(0, 0, logElem);
+                }
+                // перерисовать
+                this.setState({dataFlow: this.state.dataFlow});
+            }
         }.bind(this);
         this.props.babblerDevice.addOnDataErrorListener(this.dataErrorListener);
     },

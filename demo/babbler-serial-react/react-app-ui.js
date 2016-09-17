@@ -200,6 +200,9 @@ ReactDOM.render(
                     reverseOrder={true}
                     maxItems={10000}
                     timestamp={true}
+//                    filter={{ err: false, data: false }}
+//                    filter={{ data: {queue: false} }}
+//                    filter={{ err: {in: false, out: false, queue: false}, data: {in: false, out: false, queue: false} }}
                     style={{margin: 20}}/>
             </Tab>
         </Tabs>
