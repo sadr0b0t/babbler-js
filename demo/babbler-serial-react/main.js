@@ -33,7 +33,7 @@ app.on('ready', function() {
     mainWindow.loadURL('file://' + __dirname + '/index.html');
 
     // Открываем DevTools.
-    mainWindow.webContents.openDevTools();
+    //mainWindow.webContents.openDevTools();
 
     // Этот метод будет выполнен, когда генерируется событие закрытия окна.
     mainWindow.on('closed', function() {
