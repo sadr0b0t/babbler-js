@@ -6,6 +6,9 @@ import FontIcon from 'material-ui/FontIcon';
 import {red200, green200} from 'material-ui/styles/colors';
 import CircularProgress from 'material-ui/CircularProgress';
 
+//import BabblerDevice from 'babbler.js/babbler';
+import BabblerDevice from '../../script/babbler.js';
+
 var BabblerConnectionStatusIcon = React.createClass({
 // http://www.material-ui.com/#/components/circular-progress
 // icons
@@ -40,7 +43,7 @@ var BabblerConnectionStatusIcon = React.createClass({
     render: function() {
         var iconSize = this.props.iconSize ? this.props.iconSize : 50;
     
-        if(this.state.deviceStatus === BBLR_STATUS_DISCONNECTED) {
+        if(this.state.deviceStatus === BabblerDevice.Status.DISCONNECTED) {
             // не подключены к устройству
             return (
                 <span style={this.props.style}>
@@ -52,7 +55,7 @@ var BabblerConnectionStatusIcon = React.createClass({
                 </span>
             );
             
-        } else if(this.state.deviceStatus === BBLR_STATUS_CONNECTING) {
+        } else if(this.state.deviceStatus === BabblerDevice.Status.CONNECTING) {
             // подключаемся
             return (
                 <span style={this.props.style}>
@@ -62,7 +65,7 @@ var BabblerConnectionStatusIcon = React.createClass({
                         style={{"verticalAlign": "middle"}} />
                 </span>
             );
-        } else {//if(this.state.deviceStatus === BBLR_STATUS_CONNECTED) {
+        } else {//if(this.state.deviceStatus === BabblerDevice.Status.CONNECTED) {
             // подключены
             return (
                 <span style={this.props.style}>

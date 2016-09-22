@@ -19,6 +19,8 @@ import {red200, green200} from 'material-ui/styles/colors';
 
 import Subheader from 'material-ui/Subheader';
 
+import BabblerDevice from '../../script/babbler.js';
+
 import BabblerConnectionStatusIcon from '../../react-components/material-ui/BabblerConnectionStatusIcon';
 import BabblerConnectionErrorSnackbar from '../../react-components/material-ui/BabblerConnectionErrorSnackbar';
 import BabblerConnectionPanel from '../../react-components/material-ui/BabblerConnectionPanel';
@@ -72,7 +74,7 @@ var BabblerActions = React.createClass({
     },
     
     render: function() {
-        var connected = this.state.deviceStatus === BBLR_STATUS_CONNECTED ? true : false;
+        var connected = this.state.deviceStatus === BabblerDevice.Status.CONNECTED ? true : false;
         return (
             <div style={{overflowY: "auto", height: 500}}>
                 <div>
@@ -196,7 +198,7 @@ var BabblerActionsLeds = React.createClass({
     },
     
     render: function() {
-        var connected = this.state.deviceStatus === BBLR_STATUS_CONNECTED ? true : false;
+        var connected = this.state.deviceStatus === BabblerDevice.Status.CONNECTED ? true : false;
         return (
             <div style={{textAlign: "center"}}>
                 <div>

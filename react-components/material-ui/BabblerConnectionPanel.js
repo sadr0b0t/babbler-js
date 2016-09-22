@@ -7,6 +7,9 @@ import RaisedButton from 'material-ui/RaisedButton';
 import SerialPortPopover from './SerialPortPopover';
 //import SerialPortDropdown from './SerialPortDropdown';
 
+//import BabblerDevice from 'babbler.js/babbler';
+import BabblerDevice from '../../script/babbler.js';
+
 const btnStyle = {
   margin: 12
 };
@@ -39,7 +42,7 @@ var BabblerConnectionPanel = React.createClass({
     },
     
     render: function() {
-        if(this.state.deviceStatus === BBLR_STATUS_DISCONNECTED) {
+        if(this.state.deviceStatus === BabblerDevice.Status.DISCONNECTED) {
             // не подключены к устройству
             
             // проверка на пустую строку: true, если undefined, null, 0, "", " ")
@@ -59,7 +62,7 @@ var BabblerConnectionPanel = React.createClass({
                 </span>
             );
             
-        } else if(this.state.deviceStatus === BBLR_STATUS_CONNECTING) {
+        } else if(this.state.deviceStatus === BabblerDevice.Status.CONNECTING) {
             // подключаемся
             return (
                 <span style={this.props.style}>
@@ -68,7 +71,7 @@ var BabblerConnectionPanel = React.createClass({
                     подключаем {this.state.portName}
                 </span>
             );
-        } else {//if(this.state.deviceStatus === BBLR_STATUS_CONNECTED) {
+        } else {//if(this.state.deviceStatus === BabblerDevice.Status.CONNECTED) {
             // подключены
             return (
                 <span style={this.props.style}>

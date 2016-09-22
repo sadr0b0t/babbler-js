@@ -4,6 +4,9 @@ var React = require('react');
 
 import Snackbar from 'material-ui/Snackbar';
 
+//import BabblerDevice from 'babbler.js/babbler';
+import BabblerDevice from '../../script/babbler.js';
+
 var BabblerConnectionErrorSnackbar = React.createClass({
 // http://www.material-ui.com/#/components/snackbar
     
@@ -19,7 +22,7 @@ var BabblerConnectionErrorSnackbar = React.createClass({
         this.babblerDeviceListener = function onStatusChange(status) {
             // Показываем сообщение только если отключились с ошибкой
             var err = this.props.babblerDevice.deviceError();
-            if(status === BBLR_STATUS_DISCONNECTED && err != undefined) {
+            if(status === BabblerDevice.Status.DISCONNECTED && err != undefined) {
                 this.setState({
                     open: true,
                     message: (err.hasOwnProperty("message") ? err.message : err.toString())

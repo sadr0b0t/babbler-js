@@ -4,6 +4,9 @@ var React = require('react');
 
 import {red200, lime900, deepPurple900, yellow900} from 'material-ui/styles/colors';
 
+//import BabblerDevice from 'babbler.js/babbler';
+import BabblerDevice from '../../script/babbler.js';
+
 var BabblerDataFlow = React.createClass({
     getInitialState: function() {
         return {
@@ -36,9 +39,9 @@ var BabblerDataFlow = React.createClass({
             if(this.props.filter != undefined && this.props.filter.data != undefined) {
                 // задан фильтр по ошибкам, посмотрим, есть чего запрещенного
                 if( (this.props.filter.data === false) ||
-                    (dir == BBLR_DATA_FLOW_IN && this.props.filter.data.in === false) ||
-                    (dir == BBLR_DATA_FLOW_OUT && this.props.filter.data.out === false) ||
-                    (dir == BBLR_DATA_FLOW_QUEUE && this.props.filter.data.queue === false) ) {
+                    (dir === BabblerDevice.DataFlow.IN && this.props.filter.data.in === false) ||
+                    (dir === BabblerDevice.DataFlow.OUT && this.props.filter.data.out === false) ||
+                    (dir === BabblerDevice.DataFlow.QUEUE && this.props.filter.data.queue === false) ) {
                     skip = true;
                 }
             }
@@ -46,13 +49,13 @@ var BabblerDataFlow = React.createClass({
             if(!skip) {
                 var mark;
                 var style;
-                if(dir == BBLR_DATA_FLOW_IN) {
+                if(dir === BabblerDevice.DataFlow.IN) {
                     mark = "in>>";
                     style = {color: deepPurple900};
-                } else if(dir == BBLR_DATA_FLOW_OUT) {
+                } else if(dir === BabblerDevice.DataFlowOUT) {
                     mark = "out<<";
                     style = {color: lime900};
-                } else {//if(dir == BBLR_DATA_FLOW_QUEUE) {
+                } else {//if(dir === BabblerDevice.DataFlow.QUEUE) {
                     mark = "queue<<";
                     style = {color: yellow900};
                 }
@@ -92,15 +95,15 @@ var BabblerDataFlow = React.createClass({
             if(this.props.filter != undefined && this.props.filter.err != undefined) {
                 // задан фильтр по ошибкам, посмотрим, есть чего запрещенного
                 if( (this.props.filter.err === false) ||
-                    (dir == BBLR_DATA_FLOW_IN && this.props.filter.err.in === false) ||
-                    (dir == BBLR_DATA_FLOW_OUT && this.props.filter.err.out === false) ||
-                    (dir == BBLR_DATA_FLOW_QUEUE && this.props.filter.err.queue === false) ) {
+                    (dir === BabblerDevice.DataFlow.IN && this.props.filter.err.in === false) ||
+                    (dir === BabblerDevice.DataFlow.OUT && this.props.filter.err.out === false) ||
+                    (dir === BabblerDevice.DataFlow.QUEUE && this.props.filter.err.queue === false) ) {
                     skip = true;
                 }
             }
             
             if(!skip) {
-                var mark = (dir == BBLR_DATA_FLOW_IN ? "err>>" : "err<<");
+                var mark = (dir === BabblerDevice.DataFlow.IN ? "err>>" : "err<<");
                 var style = {color: red200};
                 
                 this.itemKeyCounter++;
@@ -131,7 +134,7 @@ var BabblerDataFlow = React.createClass({
     },
     
     render: function() {
-        var connected = this.state.deviceStatus === BBLR_STATUS_CONNECTED ? true : false;
+        var connected = this.state.deviceStatus === BabblerDevice.Status.CONNECTED ? true : false;
         return (
             <div style={this.props.style}>
                 {this.state.dataFlow}
