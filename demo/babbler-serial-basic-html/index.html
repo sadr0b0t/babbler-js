@@ -14,15 +14,15 @@
     <script type="text/javascript">
       var babblerDevice = new BabblerDevice(
           function onStatusChange(status) {
-              if(status === BBLR_STATUS_DISCONNECTED) {
+              if(status === BabblerDevice.Status.DISCONNECTED) {
                   document.getElementById('bblr-serial-disconnected-pnl').style.display = "block";
                   document.getElementById('bblr-serial-connecting-pnl').style.display = "none";
                   document.getElementById('bblr-serial-connected-pnl').style.display = "none";
-              } else if(status === BBLR_STATUS_CONNECTING) {
+              } else if(status === BabblerDevice.Status.CONNECTING) {
                   document.getElementById('bblr-serial-disconnected-pnl').style.display = "none";
                   document.getElementById('bblr-serial-connecting-pnl').style.display = "block";
                   document.getElementById('bblr-serial-connected-pnl').style.display = "none";
-              } else if(status === BBLR_STATUS_CONNECTED) {
+              } else if(status === BabblerDevice.Status.CONNECTED) {
                   document.getElementById('bblr-serial-disconnected-pnl').style.display = "none";
                   document.getElementById('bblr-serial-connecting-pnl').style.display = "none";
                   document.getElementById('bblr-serial-connected-pnl').style.display = "block";
@@ -30,7 +30,7 @@
           
           
               document.getElementById('device_status').innerHTML = status;
-              if(status === BBLR_STATUS_DISCONNECTED && babblerDevice.deviceError() != undefined) {
+              if(status === BabblerDevice.Status.DISCONNECTED && babblerDevice.deviceError() != undefined) {
                   document.getElementById('device_status').innerHTML += " (" + babblerDevice.deviceError() + ")";
               }
           }
