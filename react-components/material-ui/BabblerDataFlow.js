@@ -52,7 +52,7 @@ var BabblerDataFlow = React.createClass({
                 if(dir === BabblerDevice.DataFlow.IN) {
                     mark = "in>>";
                     style = {color: deepPurple900};
-                } else if(dir === BabblerDevice.DataFlowOUT) {
+                } else if(dir === BabblerDevice.DataFlow.OUT) {
                     mark = "out<<";
                     style = {color: lime900};
                 } else {//if(dir === BabblerDevice.DataFlow.QUEUE) {
