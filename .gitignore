@@ -4,6 +4,9 @@
 # Node.js modules
 node_modules
 
+# npm pack
+*.tgz
+
 # Babel output for npm
 lib
 
