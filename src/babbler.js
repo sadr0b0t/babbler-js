@@ -171,9 +171,9 @@ function BabblerDevice(onStatusChange) {
      * иначе не живо - отключаемся.
      */
     var _checkDeviceAlive = function() {
-        _queueCmd(cmd=BBLR_CMD_PING, params=[],
+        _queueCmd(/*cmd*/ BBLR_CMD_PING, /*params*/ [],
             // onReply
-            onReply=function(cmd, id, reply) {
+            function(cmd, id, reply) {
                 // как минимум для последовательного порта
                 // здесь это делать не обязательно, т.к.
                 // статус "включено" отлавливается в 
@@ -181,7 +181,7 @@ function BabblerDevice(onStatusChange) {
                 //_setDeviceStatus(DeviceStatus.CONNECTED);
             },
             // onError
-            onError=function(cmd, msg) {
+            function(cmd, msg) {
                 _disconnect(msg);
             }
         );
@@ -281,9 +281,9 @@ function BabblerDevice(onStatusChange) {
             // отправляем пинг напрямую, а не через очередь команд, т.к. 
             // очередь в этот момент все равно пустая и не работает
             var firstPing = function() {
-                _writeCmd(cmd = "ping", params = [],
+                _writeCmd(/*cmd*/ "ping", /*params*/ [],
                     // onReply 
-                    onReply = function() {
+                    function() {
                         // пришел ответ - теперь точно подключены
                         
                         // отправлять команду на устройство раз в 200 миллисекунд (5 раз в секунду)
@@ -303,7 +303,7 @@ function BabblerDevice(onStatusChange) {
                         _setDeviceStatus(DeviceStatus.CONNECTED);
                     },
                     // onError 
-                    onError = function(cmd, msg) {
+                    function(cmd, msg) {
                         // превышено врем ожидаения ответа - пробуем еще раз до 
                         // тех пор, пока не подключимся или не отменим попытки
                         if(_deviceStatus === DeviceStatus.CONNECTING && msg === BBLR_ERROR_REPLY_TIMEOUT) {
