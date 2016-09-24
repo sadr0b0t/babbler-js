@@ -1,3 +1,9 @@
+# gedit backups
 *~
+
+# Node.js modules
 node_modules
+
+# Babel output for npm
+lib
 
