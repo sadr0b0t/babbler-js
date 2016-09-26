@@ -283,8 +283,12 @@ function BabblerDevice(onStatusChange) {
             var firstPing = function() {
                 _writeCmd(/*cmd*/ "ping", /*params*/ [],
                     // onReply 
-                    function() {
+                    function(cmd, id, reply) {
                         // пришел ответ - теперь точно подключены
+                        // (вообще, можно было бы проверить, что статус reply=='ok',
+                        // а не 'dontundertand' или 'error', но корректно сформированного
+                        // ответа, в общем, и так достаточно, будем прощать всякие 
+                        // косяки по максимуму)
                         
                         // отправлять команду на устройство раз в 200 миллисекунд (5 раз в секунду)
                         // (на 100 миллисекундах команды начинают склеиваться)
@@ -451,7 +455,7 @@ function BabblerDevice(onStatusChange) {
     
     /**
      * Отправить команду на устройство.
-     * onReply(cmd, reply)
+     * onReply(cmd, id, reply)
      * onError(cmd, errorMsg)
      */
     var _writeCmd = function(cmd, params, onReply, onError) {
@@ -667,7 +671,7 @@ function BabblerDevice(onStatusChange) {
     }
     
     /** 
-     * Добавить слушателя - обратный вызов для реакции 
+     * Добавить слушателя - обратный вызов для реакции
      * на ошибки с входящими и исходящими данными.
      *
      * onDataError: function(data, error, dir)
