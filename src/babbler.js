@@ -2,6 +2,16 @@
 /** Ждем ответ не более 5ти секунд, потом игнорируем */
 const BBLR_REPLY_TIMEOUT_MILLIS = 5000;
 
+/** 
+ * Период выборки команд из очереди на отправку.
+ * Оправлять команду на устройство раз в 200 миллисекунд (5 раз в секунду)
+ * (на 100 миллисекундах команды начинают склеиваться)
+ */
+const BBLR_DEQUEUE_PERIOD = 200;
+
+/** Прочищаем зависшие запросы раз в секунду */
+const BBLR_VALIDATE_REPLY_CALLBACKS_PERIOD = 1000;
+
 
 /** Статусы устройства: отключено, подключаемся, подключено */
 const DeviceStatus = {
@@ -276,7 +286,7 @@ function BabblerDevice(onStatusChange) {
             // как примем ответ на первый пинг
             
             // прочищаем зависшие запросы раз в секунду
-            validateIntId = setInterval(_validateReplyCallbacks, 1000);
+            validateIntId = setInterval(_validateReplyCallbacks, BBLR_VALIDATE_REPLY_CALLBACKS_PERIOD);
             
             // отправляем пинг напрямую, а не через очередь команд, т.к. 
             // очередь в этот момент все равно пустая и не работает
@@ -292,7 +302,7 @@ function BabblerDevice(onStatusChange) {
                         
                         // отправлять команду на устройство раз в 200 миллисекунд (5 раз в секунду)
                         // (на 100 миллисекундах команды начинают склеиваться)
-                        dequeueIntId = setInterval(_dequeueCmd, 200);
+                        dequeueIntId = setInterval(_dequeueCmd, BBLR_DEQUEUE_PERIOD);
                         
                         // проверять статус устройства раз в 5 секунд
                         // (при подключении через последовательный порт - это излишество,
@@ -317,6 +327,7 @@ function BabblerDevice(onStatusChange) {
                 );
             }
             firstPing();
+            //setTimeout(firstPing, 5000);
         });
 
         // пришли данные
