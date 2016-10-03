@@ -318,7 +318,7 @@ function BabblerDevice(onStatusChange) {
                     },
                     // onError 
                     function(cmd, msg) {
-                        // превышено врем ожидаения ответа - пробуем еще раз до 
+                        // превышено время ожидаения ответа - пробуем еще раз до
                         // тех пор, пока не подключимся или не отменим попытки
                         if(_deviceStatus === DeviceStatus.CONNECTING && msg === BBLR_ERROR_REPLY_TIMEOUT) {
                             firstPing();
@@ -327,6 +327,9 @@ function BabblerDevice(onStatusChange) {
                 );
             }
             firstPing();
+            // поможет обойти баг на старых загрузчиках ChipKIT Uno32
+            // (если перепрошить нет возможности)
+            // см: http://chipkit.net/forum/viewtopic.php?f=19&t=3731&p=15573#p15573
             //setTimeout(firstPing, 5000);
         });
 
