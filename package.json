@@ -9,7 +9,9 @@
     "LICENSE"
   ],
   "dependencies": {
-    "serialport": "^4.0.1"
+    "serialport": "^4.0.1",
+    "inherits": "^2.0.3",
+    "node-event-emitter": "0.0.1"
   },
   "devDependencies": {
     "babel-cli": "^6.14.0",

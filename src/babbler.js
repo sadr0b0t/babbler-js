@@ -1,4 +1,19 @@
 
+// Будем генерировать события с API EventEmitter
+// https://nodejs.org/api/events.html
+// https://nodejs.org/api/util.html#util_util_inherits_constructor_superconstructor
+
+// обычная нода
+//var EventEmitter = require('events');
+//var inherits = require('util').inherits;
+
+// для браузера - порты без глубоких зависимостей
+var EventEmitter = require('node-event-emitter');
+var inherits = require('inherits');
+
+///////////////////////
+// Внутренние константы
+
 /** Ждем ответ не более 5ти секунд, потом игнорируем */
 const BBLR_REPLY_TIMEOUT_MILLIS = 5000;
 
@@ -30,6 +45,12 @@ const DataFlow = {
     QUEUE: "queue"
 };
 
+const BabblerEvent = {
+    STATUS: "status",
+    DATA: "data",
+    DATA_ERROR: "data_error",
+}
+
 /** Ошибка команды: таймаут */
 const BBLR_ERROR_REPLY_TIMEOUT = "Reply timeout";
 /** Ошибка команды: устройство отключено до отпавки */
@@ -48,13 +69,41 @@ const BBLR_CMD_PING = "ping";
 
 
 /**
- * Создать экземпляр устройства - плата с прошивкой на основе библиотеки Babbler_h, 
+ * Обратный вызов, вызывается при смере статуса подключения к устройству.
+ * @typedef {function} statusChangeCallback
+ * @param {string} status - статус подключения DeviceStatus: 
+ *     'disconnected', 'connecting', 'connected'
+ */
+ 
+/**
+ * Обратный вызов для реакции на входящие и исходящие данные.
+ * @typedef {function} dataCallback
+ * @param {string} data - пакет данных
+ * @param {string} dir - направление данных DataFlow:
+ *     in - данные пришли с устройства, 
+ *     out - данные отправлены на устройство,
+ *     queue - данные добавлены во внутреннюю очеред на отправку
+ */
+
+/**
+ * Обратный вызов для реакции на ошибку при отправке и приеме данных.
+ * @typedef {function} dataErrorCallback
+ * @param {string} data - пакет данных
+ * @param {string} dir - направление данных DataFlow:
+ *     in - данные пришли с устройства, 
+ *     out - данные отправлены на устройство,
+ *     queue - данные добавлены во внутреннюю очеред на отправку
+ * @param {?error} error - информация об ошибке.
+ */
+
+/**
+ * Создать экземпляр устройства - плата с прошивкой на основе библиотеки babbler_h, 
  * подключенная через последовательный порт.
  * 
  * https://github.com/1i7/babbler_h
  *
- * @param onStatusChange колбэк для получения обновлений статуса подключения к устройству.
- *     параметры: status - статус подключения: disconnected, connecting, connected
+ * @param {module:babbler-js~statusChangeCallback=} onStatusChange - обратный вызов 
+ *     для получения обновлений статуса подключения к устройству.
  */
 function BabblerDevice(onStatusChange) {
     //http://phrogz.net/js/classes/OOPinJS.html
@@ -82,38 +131,10 @@ function BabblerDevice(onStatusChange) {
     
     ///////////////////////////////////////////
     // Слушатели событий
-    
-    /** 
-     * Обратные вызовы для реакции на изменение статуса устройства.
-     * 
-     * onStatusChange: function(status)
-     *     @param status - статус подключения: disconnected, connecting, connected 
-     */
-    var _onStatusChange = [onStatusChange];
-    
-    /** 
-     * Обратные вызовы для реакции на входящие и исходящие данные.
-     *
-     * onData: function(data, dir)
-     *     @param data - пакет данных от устройства
-     *     @param dir - направление: 
-     *         in (данные пришли с устройства), 
-     *         out (данные отправлены на устройство)
-     */
-    var _onData = [];
-    
-    /** 
-     * Обратные вызовы для реакции на ошибки с входящими и исходящими данными.
-     *
-     * onDataError: function(data, error, dir)
-     *     @param data - пакет данных от устройства
-     *     @param error - сообщение об ошибке
-     *     @param dir - направление: 
-     *         in (данные пришли с устройства), 
-     *         out (данные отправлены на устройство)
-     */
-    var _onDataError = [];
-    
+    // подпишем слушателя статуса устройства из конструктора
+    if(onStatusChange != undefined) {
+        this.on(BabblerEvent.STATUS, onStatusChange);
+    }
     
     ///////////////////////////////////////////
     // Внутренняя кухня
@@ -152,6 +173,7 @@ function BabblerDevice(onStatusChange) {
     /**
      * Вычистить колбэки, которые ожидают в очереди дольше установленного таймаута
      * BBLR_REPLY_TIMEOUT_MILLIS (5ти секунд)
+     * @emits module:babbler-js#data_error
      */
     var _validateReplyCallbacks = function() {
         // 
@@ -166,15 +188,18 @@ function BabblerDevice(onStatusChange) {
             var callback = toRemove[i];
             cmdReplyCallbackQueue.splice(cmdReplyCallbackQueue.indexOf(callback), 1);
             // известим отправившего команду
-            callback.onError(callback.cmd, BBLR_ERROR_REPLY_TIMEOUT);
+            callback.onError(callback.cmd, new Error(BBLR_ERROR_REPLY_TIMEOUT));
             // остальных тоже известим, что ответа не дождались
-            _fireOnDataError(
-                JSON.stringify({cmd: callback.cmd, id: callback.id, params: callback.params}), 
-                BBLR_ERROR_REPLY_TIMEOUT, DataFlow.IN);
+            this.emit(
+                BabblerEvent.DATA_ERROR,
+                JSON.stringify({cmd: callback.cmd, id: callback.id, params: callback.params}),
+                DataFlow.IN,
+                new Error(BBLR_ERROR_REPLY_TIMEOUT)
+             );
             // выставим флаг таймаута, пока без события
             _deviceTimeoutFlag = true;
         }
-    }
+    }.bind(this);
     
     /**
      * Проверить, живо ли устройство: если ответило на ping во-время, значит живо,
@@ -191,14 +216,15 @@ function BabblerDevice(onStatusChange) {
                 //_setDeviceStatus(DeviceStatus.CONNECTED);
             },
             // onError
-            function(cmd, msg) {
-                _disconnect(msg);
+            function(cmd, err) {
+                _disconnect(err);
             }
         );
     }
     
     /**
      * Установить статус устройства: отключено, подключено, подключаемся.
+     * @emits module:babbler-js#status
      */
     var _setDeviceStatus = function(status, error) {
         _deviceError = error;
@@ -206,43 +232,15 @@ function BabblerDevice(onStatusChange) {
             _deviceStatus = status;
             
             // известим слушателей
-            for(var i in _onStatusChange) {
-                var onStatusChange = _onStatusChange[i];
-                if(onStatusChange != undefined) {
-                    onStatusChange(status);
-                }
-            }
+            this.emit(BabblerEvent.STATUS, status);
         }
-    }
+    }.bind(this);
     
-    /**
-     * Известить слушателей о полученных или отправленных данных.
-     */
-    var _fireOnData = function(data, dir) {
-        for(var i in _onData) {
-            var onData = _onData[i];
-            if(onData != undefined) {
-                onData(data, dir);
-            }
-        }
-    }
-    
-    /**
-     * Известить слушателей об ошибке разбора пакета пришедших данных.
-     */
-    var _fireOnDataError = function(data, error, dir) {
-        for(var i in _onDataError) {
-            var onDataError = _onDataError[i];
-            if(onDataError != undefined) {
-                onDataError(data, error, dir);
-            }
-        }
-    }
 
     /**
      * Подключаемся к устройству на последовательном порте
      */
-    this.connect = function(portName, onData, onDataError) {
+    this.connect = function(portName) {
         // не будем подключаться, если уже подключены
         if(_deviceStatus !== DeviceStatus.DISCONNECTED) return;
         
@@ -255,7 +253,7 @@ function BabblerDevice(onStatusChange) {
         // проверка на пустую строку: true, если undefined, null, 0, "", " ")
         // http://stackoverflow.com/questions/5515310/is-there-a-standard-function-to-check-for-null-undefined-or-blank-variables-in/21732631#21732631
         if((portName ? portName.trim().length == 0 : true)) {
-            _setDeviceStatus(DeviceStatus.DISCONNECTED, BBLR_ERROR_INVALID_PORT_NAME + ": '" + portName + "'");
+            _setDeviceStatus(DeviceStatus.DISCONNECTED, new Error(BBLR_ERROR_INVALID_PORT_NAME + ": '" + portName + "'"));
             return;
         }
         
@@ -317,10 +315,10 @@ function BabblerDevice(onStatusChange) {
                         _setDeviceStatus(DeviceStatus.CONNECTED);
                     },
                     // onError 
-                    function(cmd, msg) {
+                    function(cmd, err) {
                         // превышено время ожидаения ответа - пробуем еще раз до
                         // тех пор, пока не подключимся или не отменим попытки
-                        if(_deviceStatus === DeviceStatus.CONNECTING && msg === BBLR_ERROR_REPLY_TIMEOUT) {
+                        if(_deviceStatus === DeviceStatus.CONNECTING && err.message === BBLR_ERROR_REPLY_TIMEOUT) {
                             firstPing();
                         }
                     }
@@ -335,13 +333,8 @@ function BabblerDevice(onStatusChange) {
 
         // пришли данные
         port.on('data', function(data) {
-            // известим подписавшихся:
-            // отдельно персональный колбэк
-            if(onData != undefined) {
-                onData(data);
-            }
-            // и всех остальных
-            _fireOnData(data, DataFlow.IN);
+            // известим подписавшихся
+            this.emit(BabblerEvent.DATA, data, DataFlow.IN);
             
             // ожидаем строку в формате JSON вида
             // {"cmd": "cmd_name", "id": "cmd_id", "reply": "reply_value"}
@@ -350,13 +343,8 @@ function BabblerDevice(onStatusChange) {
                 // парсим строку в объект
                 cmdReply = JSON.parse(data);
             } catch(e) {
-                // известим подписавшихся об ошибке:
-                // отдельно персональный колбэк
-                if(onDataError != undefined) {
-                    onDataError(data, e);
-                }
-                // и всех остальных
-                _fireOnDataError(data, e, DataFlow.IN);
+                // известим подписавшихся об ошибке
+                this.emit(BabblerEvent.DATA_ERROR, data, DataFlow.IN, e)
             }
             
             if(cmdReply != null) {
@@ -381,7 +369,7 @@ function BabblerDevice(onStatusChange) {
                     }
                 }
             }
-        });
+        }.bind(this));
         
         // отключили устройство (выдернули провод)
         port.on('disconnect', function () {
@@ -405,11 +393,12 @@ function BabblerDevice(onStatusChange) {
     
     /**
      * Отключиться от устройства
+     * @emits module:babbler-js#data_error
      */
-    var _disconnect = function (errorMsg) {
+    var _disconnect = function (err) {
         // сначала сообщаем всем, чтобы 
         // больше не дергали устройство
-        _setDeviceStatus(DeviceStatus.DISCONNECTED, errorMsg);
+        _setDeviceStatus(DeviceStatus.DISCONNECTED, err);
         
         // дальше спокойно зачищаем ресурсы
         
@@ -431,11 +420,13 @@ function BabblerDevice(onStatusChange) {
         for(var i in cmdReplyCallbackQueue) {
             var callback = cmdReplyCallbackQueue[i];
             // извещаем отправившего команду
-            callback.onError(callback.cmd, BBLR_ERROR_DISCONNECTED_AFTER);
+            callback.onError(callback.cmd, new Error(BBLR_ERROR_DISCONNECTED_AFTER));
             // остальных тоже известим, что ответа не дождемся
-            _fireOnDataError(
-                JSON.stringify({cmd: callback.cmd, id: callback.id, params: callback.params}), 
-                BBLR_ERROR_DISCONNECTED_AFTER, DataFlow.IN);
+            this.emit(
+               BabblerEvent.DATA_ERROR, 
+               JSON.stringify({cmd: callback.cmd, id: callback.id, params: callback.params}), 
+               DataFlow.IN,
+               new Error(BBLR_ERROR_DISCONNECTED_AFTER));
         }
         cmdReplyCallbackQueue = [];
         
@@ -444,11 +435,13 @@ function BabblerDevice(onStatusChange) {
         for(var i in cmdQueue) {
             var cmd = cmdQueue[i];
             // извещаем отправившего команду
-            cmd.onError(cmd.cmd, BBLR_ERROR_DISCONNECTED_BEFORE);
+            cmd.onError(cmd.cmd, new Error(BBLR_ERROR_DISCONNECTED_BEFORE));
             // остальных тоже известим, что команда так и не ушла из очереди
-            _fireOnDataError(
-                JSON.stringify({cmd: cmd.cmd, params: cmd.params}), 
-                BBLR_ERROR_DISCONNECTED_BEFORE, DataFlow.QUEUE);
+            this.emit(
+               BabblerEvent.DATA_ERROR, 
+               JSON.stringify({cmd: cmd.cmd, params: cmd.params}), 
+               DataFlow.QUEUE,
+               new Error(BBLR_ERROR_DISCONNECTED_BEFORE));
         }
         cmdQueue = [];
         
@@ -460,7 +453,7 @@ function BabblerDevice(onStatusChange) {
             });
         }
         port = undefined;
-    }
+    }.bind(this);
     
     /**
      * Отключиться от устройства.
@@ -469,8 +462,10 @@ function BabblerDevice(onStatusChange) {
     
     /**
      * Отправить команду на устройство.
-     * onReply(cmd, id, reply)
-     * onError(cmd, errorMsg)
+     * @param {function} onReply(cmd, id, reply)
+     * @param {function} onError(cmd, err)
+     * @emits module:babbler-js#data
+     * @emits module:babbler-js#data_error
      */
     var _writeCmd = function(cmd, params, onReply, onError) {
         // отправляем команду напрямую на устройство
@@ -488,39 +483,44 @@ function BabblerDevice(onStatusChange) {
                         
             // пишем данные здесь, результат получаем в колбэке на событие data
             var data = JSON.stringify({
-                    cmd: cmd,
-                    id: cmdId.toString(),
+                cmd: cmd,
+                id: cmdId.toString(),
                     params: params
-                })
+            });
             port.write(data,
                 function(err) {
                     if(!err) {
                         // данные ушли ок
-                        _fireOnData(data, DataFlow.OUT);
+                        this.emit(BabblerEvent.DATA, data, DataFlow.OUT);
                     } else {
                         // ошибка записи в порт 
                         // (например, порт открыт, но не хватает прав на запись)
-                        _fireOnDataError(data, BBLR_ERROR_WRITING_TO_PORT + ": " + err, DataFlow.OUT);
+                        this.emit(
+                           BabblerEvent.DATA_ERROR, 
+                           data, DataFlow.OUT, 
+                           new Error(BBLR_ERROR_WRITING_TO_PORT + ": " + err));
                         // отключаемся
                         _disconnect(BBLR_ERROR_WRITING_TO_PORT + ": " + err);
                         // персональная ошибка в onError прилетит из _disconnect
-                        //onError(cmd, "Error writing to port: " + err);
+                        //onError(cmd, new Error("Error writing to port: " + err));
                     }
-                }
+                }.bind(this)
             );
         } else {
             // порт вообще-то не открыт или устройство отключено
             // (вообще, это не должно произойти, т.к. мы ловим событие port 'disconnect')
-            _fireOnDataError(data, BBLR_ERROR_NOT_CONNECTED, DataFlow.OUT);
+            this.emit(BabblerEvent.DATA_ERROR, data, DataFlow.OUT, new Error(BBLR_ERROR_NOT_CONNECTED));
             // отключаемся
             _disconnect(BBLR_ERROR_NOT_CONNECTED);
             // персональная ошибка в onError прилетит из _disconnect
-            //onError(cmd, "Device not connected");
+            //onError(cmd, new Error("Device not connected"));
         }
-    }
+    }.bind(this);
     
     /**
      * Добавить команду в очередь на отправку на устройство.
+     * @emits module:babbler-js#data
+     * @emits module:babbler-js#data_error
      */
     var _queueCmd = function(cmd, params, onReply, onError) {
         // не добавляем новые команды, если не подключены к устройству
@@ -532,11 +532,15 @@ function BabblerDevice(onStatusChange) {
                 onError: onError
             });
             // добавили пакет в очередь
-            _fireOnData(JSON.stringify({cmd: cmd, params: params}), DataFlow.QUEUE);
+            this.emit(BabblerEvent.DATA, JSON.stringify({cmd: cmd, params: params}), DataFlow.QUEUE);
         } else {
-            onError(cmd, BBLR_ERROR_NOT_CONNECTED);
+            onError(cmd, new Error(BBLR_ERROR_NOT_CONNECTED));
             // пакет не добавляется в очередь
-            _fireOnData(JSON.stringify({cmd: cmd, params: params}), BBLR_ERROR_NOT_CONNECTED, DataFlow.QUEUE);
+            this.emit(
+                BabblerEvent.DATA_ERROR, 
+                JSON.stringify({cmd: cmd, params: params}), 
+                DataFlow.QUEUE,
+                new Error(BBLR_ERROR_NOT_CONNECTED));
         }
     }
     
@@ -586,13 +590,13 @@ function BabblerDevice(onStatusChange) {
      * таймаут BBLR_REPLY_TIMEOUT_MILLIS (5 секунд), команда считается не выполненной,
      * вызывается колбэк onError со статусом "timeout".
      * 
-     * @param cmd - имя команды, строка
-     * @param params - параметры, массив строк
-     * @param onReply - колбэк на приход ответа
+     * @param {string} cmd - имя команды, строка
+     * @param {array} params - параметры, массив строк
+     * @param {function} onReply - колбэк на приход ответа
      *     параметры: cmd, id, reply
-     * @param onError - колбэк на ошибку (команда не отправлена или ответ не пришел 
+     * @param {function} onError - колбэк на ошибку (команда не отправлена или ответ не пришел 
      *         в установленное время)
-     *     параметры: cmd, msg
+     *     параметры: cmd, err
      *     
      */
     this.sendCmd = _queueCmd;
@@ -632,85 +636,14 @@ function BabblerDevice(onStatusChange) {
     this.deviceTimeoutFlag = function() {
         return _deviceTimeout;
     }
-    
-    ///////////////////////////////////////////
-    // Слушатели событий
-    
-    /** 
-     * Добавить слушателя событий статуса устройства
-     * 
-     * onStatusChange: function(status)
-     *     @param status - статус подключения: disconnected, connecting, connected 
-     */
-    this.addOnStatusChangeListener = function(onStatusChange) {
-        if(onStatusChange != undefined) {
-            _onStatusChange.push(onStatusChange);
-        }
-    }
-    
-    /** 
-     * Удалить слушателя событий статуса устройства
-     */
-    this.removeOnStatusChangeListener = function(onStatusChange) {
-        var index = _onStatusChange.indexOf(onStatusChange);
-        if(index != -1) {
-            _onStatusChange.splice(index, 1);
-        }
-    }
-    
-    /** 
-     * Добавить слушателя - обратный вызов для реакции 
-     * на входящие и исходящие данные.
-     *
-     * onData: function(data, dir)
-     *     @param data - пакет данных от устройства
-     *     @param dir - направление: 
-     *         in (данные пришли с устройства), 
-     *         out (данные отправлены на устройство)
-     */
-    this.addOnDataListener = function(onData) {
-        if(onData != undefined) {
-            _onData.push(onData);
-        }
-    }
-    
-    /** 
-     * Удалить слушателя данных.
-     */
-    this.removeOnDataListener = function(onData) {
-        var index = _onData.indexOf(onData);
-        if(index != -1) {
-            _onData.splice(index, 1);
-        }
-    }
-    
-    /** 
-     * Добавить слушателя - обратный вызов для реакции
-     * на ошибки с входящими и исходящими данными.
-     *
-     * onDataError: function(data, error, dir)
-     *     @param data - пакет данных от устройства
-     *     @param error - сообщение об ошибке
-     *     @param dir - направление: 
-     *         in (данные пришли с устройства), 
-     *         out (данные отправлены на устройство)
-     */
-    this.addOnDataErrorListener = function(onDataError) {
-        if(onDataError != undefined) {
-            _onDataError.push(onDataError);
-        }
-    }
-    
-    /** 
-     * Удалить слушателя ошибок данных.
-     */
-    this.removeOnDataErrorListener = function(onDataError) {
-        var index = _onDataError.indexOf(onDataError);
-        if(index != -1) {
-            _onDataError.splice(index, 1);
-        }
-    }
 }
+
+// наследуем BabblerDevice от EventEmitter, чтобы
+// генерировать события красиво
+inherits(BabblerDevice, EventEmitter);
+
+/** События */
+BabblerDevice.Event = BabblerEvent;
 
 // Перечисления и константы для публики
 /** Статусы устройства: отключено, подключаемся, подключено */
