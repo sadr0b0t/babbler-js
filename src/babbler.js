@@ -45,9 +45,25 @@ const DataFlow = {
     QUEUE: "queue"
 };
 
+/** 
+ * События, на которые можно подписываться чезер интерфейс EventListener:
+ *     BabblerDevice.on(event, callback);
+ */
 const BabblerEvent = {
+    /** 
+     * Смена статуса подключения устройства: 
+     *     disconnected -> connecting -> connected 
+     */
     STATUS: "status",
+    /** Устройство отключилось */
+    DISCONNECTED: DeviceStatus.DISCONNECTED,
+    /** Устройство начало подключаться */
+    CONNECTING: DeviceStatus.CONNECTING,
+    /** Устройство подключилось */
+    CONNECTED: DeviceStatus.CONNECTED,
+    /** Отправка или получение данных */
     DATA: "data",
+    /** Проблема при отправке или получении данных */
     DATA_ERROR: "data_error",
 }
 
@@ -235,14 +251,26 @@ function BabblerDevice(onStatusChange) {
     /**
      * Установить статус устройства: отключено, подключено, подключаемся.
      * @emits module:babbler-js#status
+     * @emits module:babbler-js#disconnected
+     * @emits module:babbler-js#connecting
+     * @emits module:babbler-js#connected
      */
     var _setDeviceStatus = function(status, error) {
         _deviceError = error;
         if(_deviceStatus != status) {
             _deviceStatus = status;
             
-            // известим слушателей
+            // известим слушателей о смене статуса вообще
             this.emit(BabblerEvent.STATUS, status);
+            
+            // и по каждому статусу в отдельности
+            if(status === DeviceStatus.DISCONNECTED) {
+                this.emit(BabblerEvent.DISCONNECTED, error);
+            } else if(status === DeviceStatus.CONNECTING) {
+                this.emit(BabblerEvent.CONNECTING);
+            } else if(status === DeviceStatus.CONNECTED) {
+                this.emit(BabblerEvent.CONNECTED);
+            }
         }
     }.bind(this);
     
