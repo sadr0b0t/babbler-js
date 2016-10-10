@@ -95,6 +95,16 @@ const BBLR_CMD_PING = "ping";
  *     queue - данные добавлены во внутреннюю очеред на отправку
  * @param {?error} error - информация об ошибке.
  */
+ 
+/**
+ * @typedef {Object} openOptions
+ * @property {number} [baudRate=9600] The baud rate of the port to be opened. This 
+ *     should match one of commonly available baud rates, such as 110, 300, 1200, 2400, 4800, 9600, 
+ *     14400, 19200, 38400, 57600, 115200. There is no guarantee, that the device connected 
+ *     to the serial port will support the requested baud rate, even if the port itself supports that baud rate.
+ * see https://github.com/EmergingTechnologyAdvisors/node-serialport/blob/master/lib/serialport.js#L68
+ */
+ 
 
 /**
  * Создать экземпляр устройства - плата с прошивкой на основе библиотеки babbler_h, 
@@ -239,8 +249,13 @@ function BabblerDevice(onStatusChange) {
 
     /**
      * Подключаемся к устройству на последовательном порте
+     * @param {string} portName - имя порта для подключения:
+     *     ("/dev/ttyUSB0" в Linux, "COM1", "COM2" и т.п. в Windows)
+     * @param {module:babbler-js~openOptions=} options - дополнительное настройки подключения:
+     * @param {number} [options.baudRate] - скорость порта
+     *     
      */
-    this.connect = function(portName) {
+    this.connect = function(portName, options) {
         // не будем подключаться, если уже подключены
         if(_deviceStatus !== DeviceStatus.DISCONNECTED) return;
         
@@ -259,10 +274,14 @@ function BabblerDevice(onStatusChange) {
         
         // https://github.com/EmergingTechnologyAdvisors/node-serialport#usage
         var SerialPort = require('serialport');
+        
+        // скорость подключения из настроек или по умолчанию 9600
+        var baudRate = (options != undefined && typeof options.baudRate === 'number') ? 
+            options.baudRate : 9600;
 
         port = new SerialPort(portName, {
             // скорость
-            baudRate: 9600,
+            baudRate:  baudRate,
             // получать данные по одной строке
             parser: SerialPort.parsers.readline('\n'),
             // не открывать порт сразу здесь
