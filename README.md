@@ -25,12 +25,42 @@ https://www.youtube.com/watch?v=uLHPr1sS558
 Стратегия git при обновлении версии: 
 - создаём релиз (тэг) vx.y.z
 
-Публикация в npm
+### Публикация в npm
+https://docs.npmjs.com/getting-started/publishing-npm-packages
+
 ~~~
 npm publish
 ~~~
 
-конвертировать библиотеку в CommonJS src/babbler.js -> lib/babbler.js (перед публикацией выполняется автоматом)
+### перед публикацией
+
+- Обновить версию командой
+
+vx.y.z -> vx.y.(z+1)
+~~~
+npm version patch
+~~~
+vx.y.z -> vx.(y+1).z
+~~~
+npm version minor
+~~~
+vx.y.z -> v(x+1).y.z
+~~~
+npm version minor
+~~~
+
+(внесет исправление в package.json и сразу сделает коммит в репозитории)
+
+или исправитьpackage.json и сделать коммит вручную
+
+- Удалить README.md~ (иначе он попадет в архив)
+
+- Проверить релиз - создать локальный архив babbler-js-0.1.0.tgz
+~~~
+npm pack
+~~~
+
+- конвертировать библиотеку в CommonJS src/babbler.js -> lib/babbler.js (перед публикацией выполняется автоматом)
 ~~~
 npm run-script build
 ~~~
