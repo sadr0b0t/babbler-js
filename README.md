@@ -24,14 +24,13 @@ alt="Babbler.js управление Arduino через последовател
 
 ~~~javascript
 var BabblerDevice = require('babbler-js');
+var babbler = new BabblerDevice();
 
-var babblerDevice = new BabblerDevice();
-
-babblerDevice.on('connected', function() {
+babbler.on('connected', function() {
     console.log("connected");
     
     console.log("send cmd: ping");
-    babblerDevice.sendCmd("ping", [],
+    babbler.sendCmd("ping", [],
         // onReply
         function(cmd, params, reply) {
             console.log("got reply on '" + cmd + " " + params + "': " + reply);
@@ -43,7 +42,7 @@ babblerDevice.on('connected', function() {
     );
     
     console.log("send cmd: help --list");
-    babblerDevice.sendCmd("help", ["--list"],
+    babbler.sendCmd("help", ["--list"],
         // onReply
         function(cmd, params, reply) {
             console.log("got reply on '" + cmd + " " + params + "': " + reply);
@@ -55,12 +54,12 @@ babblerDevice.on('connected', function() {
     );
 });
 
-babblerDevice.on('disconnected', function(error) {
+babbler.on('disconnected', function(error) {
     console.log("disconnected" + (error != undefined ? ": " + error : ""));
 });
 
-babblerDevice.connect("/dev/ttyUSB0");
-//babblerDevice.connect("/dev/ttyUSB0", {baudRate: 9600});
+babbler.connect("/dev/ttyUSB0");
+//babbler.connect("/dev/ttyUSB0", {baudRate: 9600});
 
 ~~~
 
