@@ -74,7 +74,7 @@ const BBLR_ERROR_DISCONNECTED_BEFORE = "Device disconnected before cmd was sent"
 /** Ошибка команды: устройство отключено после отпавки */
 const BBLR_ERROR_DISCONNECTED_AFTER = "Device disconnected after cmd was sent";
 /** Ошибка команды: устройство не подключено */
-const BBLR_ERROR_DEVICE_NOT_CONNECTED = "Device not connected"
+const BBLR_ERROR_NOT_CONNECTED = "Device not connected"
 /** Ошибка команды: ошибка записи в порт */
 const BBLR_ERROR_WRITING_TO_PORT = "Error writing to port"
 /** Неправильное имя порта устройства */
@@ -133,7 +133,7 @@ const BBLR_CMD_PING = "ping";
  *         - ответ по какой-то причине повредился при отправке/приеме.
  *     BBLR_ERROR_DISCONNECTED_BEFORE: устройство отключено до отпавки
  *     BBLR_ERROR_DISCONNECTED_AFTER: устройство отключено после отпавки
- *     BBLR_ERROR_DEVICE_NOT_CONNECTED: устройство не подключено
+ *     BBLR_ERROR_NOT_CONNECTED: устройство не подключено
  *     BBLR_ERROR_WRITING_TO_PORT: ошибка записи в порт
  */
  
