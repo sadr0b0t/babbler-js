@@ -27,10 +27,15 @@ exports.ConnectionLifecycle = {
     },
     "Device does not exist": function(test) {
         // сколько будет тестов
-        test.expect(2);
+        test.expect(3);
         
         var BabblerDevice = require('../src/babbler');
         var babbler = new BabblerDevice();
+        
+        
+        babbler.on('connecting', function() {
+            test.ok(true, "Should try to connect here");
+        });
 
         babbler.on('disconnected', function(error) {
             test.ok(true, "Disconnected here");
