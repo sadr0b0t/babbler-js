@@ -10,10 +10,6 @@ exports.ConnectionLifecycle = {
         
         var BabblerDevice = require('../src/babbler');
         var babbler = new BabblerDevice();
-
-        babbler.on('connected', function() {
-            test.ok(false, "Should not connect here");
-        });
         
         babbler.on('connecting', function() {
             test.ok(true, "Should try to connect here");
@@ -32,6 +28,9 @@ exports.ConnectionLifecycle = {
         var BabblerDevice = require('../src/babbler');
         var babbler = new BabblerDevice();
         
+        babbler.on('connected', function() {
+            test.ok(false, "Should not connect here");
+        });
         
         babbler.on('connecting', function() {
             test.ok(true, "Should try to connect here");
@@ -47,6 +46,84 @@ exports.ConnectionLifecycle = {
         
         // подключаемся к устройству - ожидаем колбэки
         babbler.connect("/dev/xxx");
+    },
+    "'connected'-'disconnected' events": function(test) {
+        // сколько будет тестов
+        test.expect(3);
+        
+        var BabblerDevice = require('../src/babbler');
+        var babbler = new BabblerDevice();
+        
+        babbler.on('connected', function() {
+            test.ok(true, "Connected ok");
+            
+            // подключились - отключаемся
+            babbler.disconnect();
+        });
+        
+        babbler.on('disconnected', function(error) {
+            test.ok(true, "Disconnected ok");
+            test.ok(error == undefined, "No errors");
+            
+            // закончили здесь
+            test.done();
+        });
+        
+        // подключаемся к устройству - ожидаем колбэки
+        babbler.connect("/dev/ttyUSB0");
+    },
+    "Test commands": function(test) {
+        // сколько будет тестов
+        test.expect(9);
+        
+        var BabblerDevice = require('../src/babbler');
+        var babbler = new BabblerDevice();
+        
+        babbler.on('connected', function() {
+            test.ok(true, "Connected ok");
+            
+            // отправим существующую корректную команду
+            babbler.sendCmd("ping", [],
+                // onReply
+                function(cmd, params, reply) {
+                    test.ok(true, "Got reply");
+                    test.equal(reply, "ok", "And reply is 'ok'");
+                    
+                    test.equal(cmd, "ping", "cmd is 'ping'");
+                    test.deepEqual(params, [], "and params are empty array");
+                },
+                // onError
+                function(cmd, params, err) {
+                    test.ok(false, "No errors");
+                }
+            );
+            
+            // отправим несуществующую некорректную команду
+            babbler.sendCmd("pingzzz", ["hello"],
+                // onReply
+                function(cmd, params, reply) {
+                    test.ok(true, "Got reply");
+                    test.equal(reply, "dontunderstand", "And reply is 'dontunderstand'");
+                    
+                    test.equal(cmd, "pingzzz", "cmd is 'pingzzz'");
+                    test.deepEqual(params, ["hello"], "and params are ['hello'] array");
+                    
+                    
+                    // отключаемся
+                    babbler.disconnect();
+                    
+                    // закончили здесь
+                    test.done();
+                },
+                // onError
+                function(cmd, params, err) {
+                    test.ok(false, "No errors");
+                }
+            );
+        });
+        
+        // подключаемся к устройству - ожидаем колбэки
+        babbler.connect("/dev/ttyUSB0");
     }
 };
 
