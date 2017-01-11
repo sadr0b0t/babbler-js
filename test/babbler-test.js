@@ -36,9 +36,9 @@ exports.ConnectionLifecycle = {
             test.ok(true, "Should try to connect here");
         });
 
-        babbler.on('disconnected', function(error) {
+        babbler.on('disconnected', function(err) {
             test.ok(true, "Disconnected here");
-            test.ok(error != undefined, "Error defined: " + error.message);
+            test.ok(err != undefined, "Error defined: " + err.message);
             
             // закончили здесь
             test.done();
@@ -61,9 +61,9 @@ exports.ConnectionLifecycle = {
             babbler.disconnect();
         });
         
-        babbler.on('disconnected', function(error) {
+        babbler.on('disconnected', function(err) {
             test.ok(true, "Disconnected ok");
-            test.ok(error == undefined, "No errors");
+            test.ok(err == undefined, "No errors");
             
             // закончили здесь
             test.done();
@@ -74,7 +74,7 @@ exports.ConnectionLifecycle = {
     },
     "Test commands": function(test) {
         // сколько будет тестов
-        test.expect(9);
+        test.expect(13);
         
         var BabblerDevice = require('../src/babbler');
         var babbler = new BabblerDevice();
@@ -108,16 +108,31 @@ exports.ConnectionLifecycle = {
                     test.equal(cmd, "pingzzz", "cmd is 'pingzzz'");
                     test.deepEqual(params, ["hello"], "and params are ['hello'] array");
                     
-                    
                     // отключаемся
                     babbler.disconnect();
-                    
-                    // закончили здесь
-                    test.done();
                 },
                 // onError
                 function(cmd, params, err) {
                     test.ok(false, "No errors");
+                }
+            );
+            
+            // отправим команду после отключения
+            babbler.sendCmd("ping", [],
+                // onReply
+                function(cmd, params, reply) {
+                    test.ok(false, "No reply after disconnect");
+                },
+                // onError
+                function(cmd, params, err) {
+                    test.ok(true, "Got error");
+                    test.ok(err != undefined, "Error defined: " + err.message);
+                    
+                    test.equal(cmd, "ping", "cmd is 'ping'");
+                    test.deepEqual(params, [], "and params are empty array");
+                    
+                    // закончили здесь
+                    test.done();
                 }
             );
         });
