@@ -74,7 +74,7 @@ exports.ConnectionLifecycle = {
     },
     "Test commands": function(test) {
         // сколько будет тестов
-        test.expect(13);
+        test.expect(15);
         
         var BabblerDevice = require('../src/babbler');
         var babbler = new BabblerDevice();
@@ -84,25 +84,25 @@ exports.ConnectionLifecycle = {
             
             // отправим существующую корректную команду
             babbler.sendCmd("ping", [],
-                // onReply
-                function(cmd, params, reply) {
+                // onResult
+                function(err, reply, cmd, params) {
                     test.ok(true, "Got reply");
+                    test.ifError(err, "No errors");
+                    
                     test.equal(reply, "ok", "And reply is 'ok'");
                     
                     test.equal(cmd, "ping", "cmd is 'ping'");
                     test.deepEqual(params, [], "and params are empty array");
-                },
-                // onError
-                function(cmd, params, err) {
-                    test.ok(false, "No errors");
                 }
             );
             
             // отправим несуществующую некорректную команду
             babbler.sendCmd("pingzzz", ["hello"],
-                // onReply
-                function(cmd, params, reply) {
+                // onResult
+                function(err, reply, cmd, params) {
                     test.ok(true, "Got reply");
+                    test.ifError(err, "No errors");
+                    
                     test.equal(reply, "dontunderstand", "And reply is 'dontunderstand'");
                     
                     test.equal(cmd, "pingzzz", "cmd is 'pingzzz'");
@@ -110,21 +110,13 @@ exports.ConnectionLifecycle = {
                     
                     // отключаемся
                     babbler.disconnect();
-                },
-                // onError
-                function(cmd, params, err) {
-                    test.ok(false, "No errors");
                 }
             );
             
             // отправим команду после отключения
             babbler.sendCmd("ping", [],
-                // onReply
-                function(cmd, params, reply) {
-                    test.ok(false, "No reply after disconnect");
-                },
-                // onError
-                function(cmd, params, err) {
+                // onResult
+                function(err, reply, cmd, params) {
                     test.ok(true, "Got error");
                     test.ok(err != undefined, "Error defined: " + err.message);
                     
