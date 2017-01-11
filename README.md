@@ -54,8 +54,8 @@ babbler.on('connected', function() {
     );
 });
 
-babbler.on('disconnected', function(error) {
-    console.log("disconnected" + (error != undefined ? ": " + error : ""));
+babbler.on('disconnected', function(err) {
+    console.log("disconnected" + (err != undefined ? ": " + err : ""));
 });
 
 babbler.connect("/dev/ttyUSB0");
