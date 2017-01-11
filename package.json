@@ -1,6 +1,6 @@
 {
   "name": "babbler-js",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Сlient library to control Arduino devices running firmware based on babbler_h library",
   "main": "lib/babbler.js",
   "files": [
