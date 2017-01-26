@@ -35,6 +35,12 @@ const DeviceStatus = {
     CONNECTED: "connected"
 };
 
+/** Статусы очереди команд: готова (принимать команды), переполнена */
+const QueueStatus = {
+    READY: "queue_ready",
+    FULL: "queue_full"
+};
+
 /** Направление потока данных */
 const DataFlow = {
     /** in: с устройства */
@@ -67,18 +73,89 @@ const BabblerEvent = {
     DATA_ERROR: "data_error",
 }
 
+// Ошибки по рекомендациям Мозилы
+// https://developer.mozilla.org/ru/docs/Web/JavaScript/Reference/Global_Objects/Error
+
 /** Ошибка команды: таймаут */
 const BBLR_ERROR_REPLY_TIMEOUT = "Reply timeout";
+function BblrReplyTimeoutError(message) {
+  this.name = 'BblrReplyTimeoutError';
+  this.message = message || BBLR_ERROR_REPLY_TIMEOUT;
+  this.stack = (new Error()).stack;
+}
+BblrReplyTimeoutError.prototype = Object.create(Error.prototype);
+BblrReplyTimeoutError.prototype.constructor = BblrReplyTimeoutError;
+
 /** Ошибка команды: устройство отключено до отпавки */
 const BBLR_ERROR_DISCONNECTED_BEFORE = "Device disconnected before cmd was sent";
+function BblrDisconnectedBeforeError(message) {
+  this.name = 'BblrDisconnectedBeforeError';
+  this.message = message || BBLR_ERROR_DISCONNECTED_BEFORE;
+  this.stack = (new Error()).stack;
+}
+BblrDisconnectedBeforeError.prototype = Object.create(Error.prototype);
+BblrDisconnectedBeforeError.prototype.constructor = BblrDisconnectedBeforeError;
+
 /** Ошибка команды: устройство отключено после отпавки */
 const BBLR_ERROR_DISCONNECTED_AFTER = "Device disconnected after cmd was sent";
+function BblrDisconnectedAfterError(message) {
+  this.name = 'BblrDisconnectedAfterError';
+  this.message = message || BBLR_ERROR_DISCONNECTED_AFTER;
+  this.stack = (new Error()).stack;
+}
+BblrDisconnectedAfterError.prototype = Object.create(Error.prototype);
+BblrDisconnectedAfterError.prototype.constructor = BblrDisconnectedAfterError;
+
 /** Ошибка команды: устройство не подключено */
 const BBLR_ERROR_NOT_CONNECTED = "Device not connected"
+function BblrNotConnectedError(message) {
+  this.name = 'BblrNotConnectedError';
+  this.message = message || BBLR_ERROR_NOT_CONNECTED;
+  this.stack = (new Error()).stack;
+}
+BblrNotConnectedError.prototype = Object.create(Error.prototype);
+BblrNotConnectedError.prototype.constructor = BblrNotConnectedError;
+
 /** Ошибка команды: ошибка записи в порт */
 const BBLR_ERROR_WRITING_TO_PORT = "Error writing to port"
+function BblrPortWriteError(message) {
+  this.name = 'BblrPortWriteError';
+  this.message = message || BBLR_ERROR_WRITING_TO_PORT;
+  this.stack = (new Error()).stack;
+}
+BblrPortWriteError.prototype = Object.create(Error.prototype);
+BblrPortWriteError.prototype.constructor = BblrPortWriteError;
+
+/** Ошибка команды: очередь команд переполнена */
+const BBLR_ERROR_QUEUE_FULL = "Queue full"
+function BblrQueueFullError(message) {
+  this.name = 'BblrQueueFullError';
+  this.message = message || BBLR_ERROR_QUEUE_FULL;
+  this.stack = (new Error()).stack;
+}
+BblrQueueFullError.prototype = Object.create(Error.prototype);
+BblrQueueFullError.prototype.constructor = BblrQueueFullError;
+
+/** Ошибка команды: отменена до отправки на устройство */
+const BBLR_ERROR_DISCARDED = "Discarded"
+function BblrDiscardedError(message) {
+  this.name = 'BblrDiscardedError';
+  this.message = message || BBLR_ERROR_DISCARDED;
+  this.stack = (new Error()).stack;
+}
+BblrDiscardedError.prototype = Object.create(Error.prototype);
+BblrDiscardedError.prototype.constructor = BblrDiscardedError;
+
+
 /** Неправильное имя порта устройства */
 const BBLR_ERROR_INVALID_PORT_NAME = "Invalid port name"
+function BblrInvalidPortNameError(message) {
+  this.name = 'BblrInvalidPortNameError';
+  this.message = message || BBLR_ERROR_INVALID_PORT_NAME;
+  this.stack = (new Error()).stack;
+}
+BblrInvalidPortNameError.prototype = Object.create(Error.prototype);
+BblrInvalidPortNameError.prototype.constructor = BblrInvalidPortNameError;
 
 /** Команда ping */
 const BBLR_CMD_PING = "ping";
@@ -116,15 +193,18 @@ const BBLR_CMD_PING = "ping";
  * @typedef {function} cmdResultCallback
  * @param {?error} err - ошибка или undefined, если пришел ответ
  *   Варианты ошибок:
- *     BBLR_ERROR_REPLY_TIMEOUT: ответ не получен вовремя. 
+ *     BblrReplyTimeoutError: ответ не получен вовремя. 
  *         Возможные причины:
  *         - устройство не отправило ответ,
  *         - устройство не успело отправить ответ вовремя,
  *         - ответ по какой-то причине повредился при отправке/приеме.
- *     BBLR_ERROR_DISCONNECTED_BEFORE: устройство отключено до отпавки
- *     BBLR_ERROR_DISCONNECTED_AFTER: устройство отключено после отпавки
- *     BBLR_ERROR_NOT_CONNECTED: устройство не подключено
- *     BBLR_ERROR_WRITING_TO_PORT: ошибка записи в порт
+ *     BblrDisconnectedBeforeError: устройство отключено до отпавки
+ *     BblrDisconnectedAfterError: устройство отключено после отпавки
+ *     BblrNotConnectedError: устройство не подключено
+ *     BblrPortWriteError: ошибка записи в порт
+ *     BblrQueueFullError: очередь команд переполнена
+ *     BblrDiscardedError: команда отменена до отправки на устройство
+ *     
  * @param {string} reply - ответ на команду от устройства (undefined, если ошибка)
  * @param {string} cmd - имя исходной команды
  * @param {array} params - исходные параметры, массив строк
@@ -276,13 +356,13 @@ function BabblerDevice(onStatusChange) {
             var callbackInfo = toRemove[i];
             cmdResultCallbackQueue.splice(cmdResultCallbackQueue.indexOf(callbackInfo), 1);
             // известим отправившего команду
-            callbackInfo.onResult(new Error(BBLR_ERROR_REPLY_TIMEOUT), undefined, callbackInfo.cmd, callbackInfo.params);
+            callbackInfo.onResult(new BblrReplyTimeoutError(), undefined, callbackInfo.cmd, callbackInfo.params);
             // остальных тоже известим, что ответа не дождались
             this.emit(
                 BabblerEvent.DATA_ERROR,
                 JSON.stringify({cmd: callbackInfo.cmd, params: callbackInfo.params, id: callbackInfo.id}),
                 DataFlow.IN,
-                new Error(BBLR_ERROR_REPLY_TIMEOUT)
+                new BblrReplyTimeoutError()
              );
             // выставим флаг таймаута, пока без события
             _deviceTimeoutFlag = true;
@@ -358,7 +438,8 @@ function BabblerDevice(onStatusChange) {
         // проверка на пустую строку: true, если undefined, null, 0, "", " ")
         // http://stackoverflow.com/questions/5515310/is-there-a-standard-function-to-check-for-null-undefined-or-blank-variables-in/21732631#21732631
         if((portName ? portName.trim().length == 0 : true)) {
-            _setDeviceStatus(DeviceStatus.DISCONNECTED, new Error(BBLR_ERROR_INVALID_PORT_NAME + ": '" + portName + "'"));
+            _setDeviceStatus(DeviceStatus.DISCONNECTED, 
+                new BblrInvalidPortNameError(BBLR_ERROR_INVALID_PORT_NAME + ": '" + portName + "'"));
             return;
         }
         
@@ -404,7 +485,7 @@ function BabblerDevice(onStatusChange) {
                         if(err) {
                             // превышено время ожидаения ответа - пробуем еще раз до
                             // тех пор, пока не подключимся или не отменим попытки
-                            if(_deviceStatus === DeviceStatus.CONNECTING && err.message === BBLR_ERROR_REPLY_TIMEOUT) {
+                            if(_deviceStatus === DeviceStatus.CONNECTING && err instanceof BblrReplyTimeoutError) {
                                 firstPing();
                             }
                         } else {
@@ -482,7 +563,7 @@ function BabblerDevice(onStatusChange) {
         
         // отключили устройство (выдернули провод)
         port.on('disconnect', function () {
-            _disconnect("Device unplugged");
+            _disconnect(new Error("Device unplugged"));
         });
 
         // 
@@ -530,13 +611,13 @@ function BabblerDevice(onStatusChange) {
         for(var i in cmdResultCallbackQueue) {
             var callbackInfo = cmdResultCallbackQueue[i];
             // извещаем отправившего команду
-            callbackInfo.onResult(new Error(BBLR_ERROR_DISCONNECTED_AFTER), undefined, callbackInfo.cmd, callbackInfo.params);
+            callbackInfo.onResult(new BblrDisconnectedAfterError(), undefined, callbackInfo.cmd, callbackInfo.params);
             // остальных тоже известим, что ответа не дождемся
             this.emit(
                BabblerEvent.DATA_ERROR, 
                JSON.stringify({cmd: callbackInfo.cmd, params: callbackInfo.params, id: callbackInfo.id}), 
                DataFlow.IN,
-               new Error(BBLR_ERROR_DISCONNECTED_AFTER));
+               new BblrDisconnectedAfterError());
         }
         cmdResultCallbackQueue = [];
         
@@ -545,13 +626,13 @@ function BabblerDevice(onStatusChange) {
         for(var i in cmdQueue) {
             var cmdInfo = cmdQueue[i];
             // извещаем отправившего команду
-            cmdInfo.onResult(new Error(BBLR_ERROR_DISCONNECTED_BEFORE), undefined, cmdInfo.cmd, cmdInfo.params);
+            cmdInfo.onResult(new BblrDisconnectedBeforeError(), undefined, cmdInfo.cmd, cmdInfo.params);
             // остальных тоже известим, что команда так и не ушла из очереди
             this.emit(
                BabblerEvent.DATA_ERROR, 
                JSON.stringify({cmd: cmdInfo.cmd, params: cmdInfo.params}), 
                DataFlow.QUEUE,
-               new Error(BBLR_ERROR_DISCONNECTED_BEFORE));
+               new BblrDisconnectedBeforeError());
         }
         cmdQueue = [];
         
@@ -607,22 +688,22 @@ function BabblerDevice(onStatusChange) {
                             BabblerEvent.DATA_ERROR, 
                             data, 
                             DataFlow.OUT, 
-                            new Error(BBLR_ERROR_WRITING_TO_PORT + ": " + err));
+                            new BblrPortWriteError(BBLR_ERROR_WRITING_TO_PORT + ": " + err));
                         // отключаемся
-                        _disconnect(BBLR_ERROR_WRITING_TO_PORT + ": " + err);
+                        _disconnect(new BblrPortWriteError(BBLR_ERROR_WRITING_TO_PORT + ": " + err));
                         // персональная ошибка в onResult прилетит из _disconnect
-                        //onResult(new Error("Error writing to port: " + err), undefined, cmd, params);
+                        //onResult(new BblrPortWriteError(BBLR_ERROR_WRITING_TO_PORT + ": " + err), undefined, cmd, params);
                     }
                 }.bind(this)
             );
         } else {
             // порт вообще-то не открыт или устройство отключено
             // (вообще, это не должно произойти, т.к. мы ловим событие port 'disconnect')
-            this.emit(BabblerEvent.DATA_ERROR, data, DataFlow.OUT, new Error(BBLR_ERROR_NOT_CONNECTED));
+            this.emit(BabblerEvent.DATA_ERROR, data, DataFlow.OUT, new BblrNotConnectedError());
             // отключаемся
-            _disconnect(BBLR_ERROR_NOT_CONNECTED);
+            _disconnect(new BblrNotConnectedError());
             // персональная ошибка в onResult прилетит из _disconnect
-            //onResult(new Error("Device not connected"), undefined, cmd, params);
+            //onResult(new BblrNotConnectedError(), undefined, cmd, params);
         }
     }.bind(this);
     
@@ -646,13 +727,13 @@ function BabblerDevice(onStatusChange) {
             // добавили пакет в очередь
             this.emit(BabblerEvent.DATA, JSON.stringify({cmd: cmd, params: params}), DataFlow.QUEUE);
         } else {
-            onResult(new Error(BBLR_ERROR_NOT_CONNECTED), undefined, cmd, params);
+            onResult(new BblrNotConnectedError(), undefined, cmd, params);
             // пакет не добавляется в очередь
             this.emit(
                 BabblerEvent.DATA_ERROR, 
                 JSON.stringify({cmd: cmd, params: params}), 
                 DataFlow.QUEUE,
-                new Error(BBLR_ERROR_NOT_CONNECTED));
+                new BblrNotConnectedError());
         }
     }
     
@@ -670,7 +751,7 @@ function BabblerDevice(onStatusChange) {
         // список команд пуст (до этого момента их нельзя добавлять - не сработает
         // _queueCmd, а все старые команды вычищаются с ошибкой вызовом disconnect)
         
-        // Отправляем новую команду только если другая команда не ожидает ответа.
+        // Отправляем новую команду только, если другая команда не ожидает ответа.
         // Если устройство по какой-то причине не прислало ответ (или присланный 
         // ответ некорректен - не распарсился или не совпал id команды или типа того),
         // очередь ожидания будет очищена через BBLR_REPLY_TIMEOUT_MILLIS (5 секунд)
@@ -759,8 +840,20 @@ BabblerDevice.Event = BabblerEvent;
 /** Статусы устройства: отключено, подключаемся, подключено */
 BabblerDevice.Status = DeviceStatus;
 
+/** Статусы очереди команд: готова (принимать команды), переполнена */
+BabblerDevice.QueueStatus = QueueStatus;
+
 /** Направление потока данных */
 BabblerDevice.DataFlow = DataFlow;
+
+/** Ошибки Error */
+BabblerDevice.BblrReplyTimeoutError = BblrReplyTimeoutError;
+BabblerDevice.BblrDisconnectedBeforeError = BblrDisconnectedBeforeError;
+BabblerDevice.BblrDisconnectedAfterError = BblrDisconnectedAfterError;
+BabblerDevice.BblrNotConnectedError = BblrNotConnectedError;
+BabblerDevice.BblrPortWriteError = BblrPortWriteError;
+BabblerDevice.BblrQueueFullError = BblrQueueFullError;
+BabblerDevice.BblrDiscardedError = BblrDiscardedError;
 
 
 // отправляем компонент на публику
