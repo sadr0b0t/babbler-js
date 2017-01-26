@@ -260,6 +260,53 @@ const BBLR_CMD_PING = "ping";
  *     на приход ответа или ошибку команды
  */
  
+
+function BabblerDeviceSerial(name, options) {
+    // обертка вокруг SerialPort
+    
+    // https://github.com/EmergingTechnologyAdvisors/node-serialport#usage
+    var SerialPort = require('serialport');
+    
+    // скорость подключения из настроек или по умолчанию 9600
+    var baudRate = (options != undefined && typeof options.baudRate === 'number') ? 
+        options.baudRate : 9600;
+
+    var port = new SerialPort(name, {
+        // скорость
+        baudRate:  baudRate,
+        // получать данные по одной строке
+        parser: SerialPort.parsers.readline('\n'),
+        // не открывать порт сразу здесь
+        autoOpen: false,
+        lock: true
+    });
+    
+    /** Устройство готово получать данные */
+    this.ready = function() {
+        return !port.paused;
+    }
+    
+    // EventEmitter.on
+    this.on = function(event, callback) {
+        port.on(event, callback);
+    }
+    
+    // SerialPort.open
+    this.open = function(callback) {
+        port.open(callback);
+    }
+    
+    // SerialPort.close
+    this.close = function(callback) {
+        port.close(callback);
+    }
+    
+    // SerialPort.write
+    this.write = function(data, callback) {
+        port.write(data, callback);
+    }
+}
+
 /**
  * Создать экземпляр устройства - плата с прошивкой на основе библиотеки babbler_h, 
  * подключенная через последовательный порт.
@@ -302,8 +349,8 @@ function BabblerDevice(onStatusChange) {
     
     ///////////////////////////////////////////
     // Внутренняя кухня
-    /** Последовательный порт */
-    var port = undefined;
+    /** Устройство */
+    var dev = undefined;
     
     /** 
      * Очередь команд на отправку 
@@ -443,29 +490,14 @@ function BabblerDevice(onStatusChange) {
             return;
         }
         
-        // https://github.com/EmergingTechnologyAdvisors/node-serialport#usage
-        var SerialPort = require('serialport');
+        dev = new BabblerDeviceSerial(portName, options);
         
-        // скорость подключения из настроек или по умолчанию 9600
-        var baudRate = (options != undefined && typeof options.baudRate === 'number') ? 
-            options.baudRate : 9600;
-
-        port = new SerialPort(portName, {
-            // скорость
-            baudRate:  baudRate,
-            // получать данные по одной строке
-            parser: SerialPort.parsers.readline('\n'),
-            // не открывать порт сразу здесь
-            autoOpen: false,
-            lock: true
-        });
-
         // 
         // События
         // 
 
-        // порт открылся
-        port.on('open', function () {
+        // устройство открылось для общения
+        dev.on('open', function () {
             // порт открыт, но устройство может еще какое-то время тупить 
             // до того, как начнет отвечать на запросы (или это может быть
             // вообще неправильное устройство)
@@ -522,7 +554,7 @@ function BabblerDevice(onStatusChange) {
         });
 
         // пришли данные
-        port.on('data', function(data) {
+        dev.on('data', function(data) {
             // известим подписавшихся
             this.emit(BabblerEvent.DATA, data, DataFlow.IN);
             
@@ -562,7 +594,7 @@ function BabblerDevice(onStatusChange) {
         }.bind(this));
         
         // отключили устройство (выдернули провод)
-        port.on('disconnect', function () {
+        dev.on('disconnect', function () {
             _disconnect(new Error("Device unplugged"));
         });
 
@@ -571,7 +603,7 @@ function BabblerDevice(onStatusChange) {
         //
 
         // открываем порт
-        port.open(function(err) {
+        dev.open(function(err) {
             if(err) {
                 // не получилось открыть порт
                 
@@ -637,8 +669,8 @@ function BabblerDevice(onStatusChange) {
         cmdQueue = [];
         
         // закрываем порт
-        if(port != undefined && !port.paused) {
-            port.close(function(err) {
+        if(dev != undefined && dev.ready()) {
+            dev.close(function(err) {
                 // ошибки ловим, но игнорируем
                 //console.log(err);
             });
@@ -659,7 +691,7 @@ function BabblerDevice(onStatusChange) {
      */
     var _writeCmd = function(cmd, params, onResult) {
         // отправляем команду напрямую на устройство
-        if(port != undefined && !port.paused) {
+        if(dev != undefined && dev.ready()) {
             cmdId++;
             // добавим колбэк на получение ответа в очередь
             cmdResultCallbackQueue.push({
@@ -676,7 +708,7 @@ function BabblerDevice(onStatusChange) {
                 params: params,
                 id: cmdId.toString()
             });
-            port.write(data,
+            dev.write(data,
                 function(err) {
                     if(!err) {
                         // данные ушли ок
@@ -698,7 +730,7 @@ function BabblerDevice(onStatusChange) {
             );
         } else {
             // порт вообще-то не открыт или устройство отключено
-            // (вообще, это не должно произойти, т.к. мы ловим событие port 'disconnect')
+            // (вообще, это не должно произойти, т.к. мы ловим событие dev 'disconnect')
             this.emit(BabblerEvent.DATA_ERROR, data, DataFlow.OUT, new BblrNotConnectedError());
             // отключаемся
             _disconnect(new BblrNotConnectedError());
