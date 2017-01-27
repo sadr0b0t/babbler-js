@@ -261,7 +261,8 @@ const BBLR_CMD_PING = "ping";
  */
  
 
-function BabblerDeviceSerial(name, options) {
+/** Устройство - последовательный порт */
+function BabblerSerialDevice(name, options) {
     // обертка вокруг SerialPort
     
     // https://github.com/EmergingTechnologyAdvisors/node-serialport#usage
@@ -307,9 +308,72 @@ function BabblerDeviceSerial(name, options) {
     }
 }
 
+
+/** Устройство - заглушка-симуляция для тестов **/
+function BabblerFakeDevice(name, options) {
+    var portName = name;
+    var portOptions = options;
+    
+    var opened = false;
+
+    /** Устройство готово получать данные */
+    this.ready = function() {
+        return opened;
+    }
+    
+    // SerialPort.open
+    this.open = function(callback) {
+        if(portName === "/dev/ttyUSB0") {
+            opened = true;
+            callback();
+            this.emit('open');
+        } else {
+            callback(new Error("Dev not found: " + portName));
+        }
+    }
+    
+    // SerialPort.close
+    this.close = function(callback) {
+        opened = false;
+        callback();
+        this.emit('disconnect');
+    }
+    
+    // SerialPort.write
+    this.write = function(data, callback) {
+        if(!opened) {
+            callback(new Error("Dev not opened"));
+        } else {
+            // парсим строку в объект
+            cmd = JSON.parse(data);
+            
+            var reply = "dontunderstand";
+            if(cmd.cmd === "ping") {
+                reply = "ok";
+            } else if(cmd.cmd === "help") {
+                reply = "ping help";
+            }
+            
+            var replyPack = JSON.stringify({
+                id: cmd.id.toString(),
+                cmd: cmd.cmd,
+                params: cmd.params,
+                reply: reply
+            });
+        
+            // типа сразу пришел ответ
+            this.emit('data', replyPack);
+        }
+    }
+}
+inherits(BabblerFakeDevice, EventEmitter);
+
+
 /**
- * Создать экземпляр устройства - плата с прошивкой на основе библиотеки babbler_h, 
- * подключенная через последовательный порт.
+ * Создать экземпляр устройства - плата с прошивкой на основе библиотеки babbler_h.
+ * Варианты подключений:
+ * - последовательный порт,
+ * - заглушка-симуляция для тестов.
  * 
  * https://github.com/1i7/babbler_h
  *
@@ -490,7 +554,18 @@ function BabblerDevice(onStatusChange) {
             return;
         }
         
-        dev = new BabblerDeviceSerial(portName, options);
+        // Выбор устройства по префиксу portName
+        if(portName.startsWith("test:")) {
+            if(options != undefined && options.dev != undefined) {
+                dev = options.dev;
+            } else {
+                dev = new BabblerFakeDevice(portName.substring("fake:".length), options);
+            }
+        } else if(portName.startsWith("serial:")) {
+            dev = new BabblerSerialDevice(portName.substring("serial:".length), options);
+        } else {
+            dev = new BabblerSerialDevice(portName, options);
+        }
         
         // 
         // События
