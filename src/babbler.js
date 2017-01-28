@@ -35,12 +35,6 @@ const DeviceStatus = {
     CONNECTED: "connected"
 };
 
-/** Статусы очереди команд: готова (принимать команды), переполнена */
-const QueueStatus = {
-    READY: "queue_ready",
-    FULL: "queue_full"
-};
-
 /** Направление потока данных */
 const DataFlow = {
     /** in: с устройства */
@@ -71,6 +65,13 @@ const BabblerEvent = {
     DATA: "data",
     /** Проблема при отправке или получении данных */
     DATA_ERROR: "data_error",
+    /** Очередь команд переполнена */
+    QUEUE_FULL: "queue_full",
+    /** 
+     * Очередь команд опять готова принимать команды после того,
+     * как была переполнена 
+     */
+    QUEUE_READY: "queue_ready"
 }
 
 // Ошибки по рекомендациям Мозилы
@@ -422,6 +423,12 @@ function BabblerDevice(onStatusChange) {
      */
     var cmdQueue = [];
     
+    /** 
+     * Максимальное количество элементов в очереди
+     * команд, 0 - без ограничения
+     */
+    var _queueLimit = 5;
+    
     /**
      * Очередь колбэков для ответов на отправленные команды
      * (по-хорошему, там всегда будет максимум один элемент, если контроллер отвечает
@@ -559,7 +566,7 @@ function BabblerDevice(onStatusChange) {
             if(options != undefined && options.dev != undefined) {
                 dev = options.dev;
             } else {
-                dev = new BabblerFakeDevice(portName.substring("fake:".length), options);
+                dev = new BabblerFakeDevice(portName.substring("test:".length), options);
             }
         } else if(portName.startsWith("serial:")) {
             dev = new BabblerSerialDevice(portName.substring("serial:".length), options);
@@ -826,16 +833,31 @@ function BabblerDevice(onStatusChange) {
     var _queueCmd = function(cmd, params, onResult) {
         // не добавляем новые команды, если не подключены к устройству
         if(_deviceStatus === DeviceStatus.CONNECTED) {
-            cmdQueue.push({
-                cmd: cmd,
-                params: params,
-                onResult: onResult
-            });
-            // добавили пакет в очередь
-            this.emit(BabblerEvent.DATA, JSON.stringify({cmd: cmd, params: params}), DataFlow.QUEUE);
+            if(_queueLimit > 0 && cmdQueue.length >= _queueLimit) {
+                // пакет не добавляется в очередь
+                onResult(new BblrQueueFullError(), undefined, cmd, params);
+                this.emit(
+                    BabblerEvent.DATA_ERROR, 
+                    JSON.stringify({cmd: cmd, params: params}), 
+                    DataFlow.QUEUE,
+                    new BblrQueueFullError());
+            } else {
+                // добавили пакет в очередь
+                cmdQueue.push({
+                    cmd: cmd,
+                    params: params,
+                    onResult: onResult
+                });
+                this.emit(BabblerEvent.DATA, JSON.stringify({cmd: cmd, params: params}), DataFlow.QUEUE);
+                
+                if(_queueLimit > 0 && cmdQueue.length == _queueLimit) {
+                    // заполнили очередь под завязку
+                    this.emit(BabblerEvent.QUEUE_FULL);
+                }
+            }
         } else {
-            onResult(new BblrNotConnectedError(), undefined, cmd, params);
             // пакет не добавляется в очередь
+            onResult(new BblrNotConnectedError(), undefined, cmd, params);
             this.emit(
                 BabblerEvent.DATA_ERROR, 
                 JSON.stringify({cmd: cmd, params: params}), 
@@ -869,16 +891,30 @@ function BabblerDevice(onStatusChange) {
         // дополнительные команды из списка с большой долей вероятности не получат
         // ответ вовремя и будут завершаться неудачей плохо предсказуемым образом).
         
-        // TODO: Побочный эффект - очередь команд на отправку будет наполняться большим
-        // количеством элементов, которые не будут удаляться по таймауту, с этим нужно 
-        // тоже что-то делать.
+        // Побочный эффект - очередь команд на отправку будет наполняться большим
+        // количеством элементов, которые не будут удаляться по таймауту.
+        // Чтобы их не накапливалось слишком много, следует устанавливать значение
+        // максимального количества элементов в очереди queueLimit. При переполнении
+        // очереди новые команды не будут добавляться с ошибкой (в интерфейсе пользователя
+        // при этом следует сделать элементы управления неактивными). В нормальной ситуации
+        // такого происходить не должно: робот должно достаточно быстро выполнять команды
+        // и отправлять ответы.
         if(cmdResultCallbackQueue.length == 0) {
+            // запомним, была ли очередь переполнена
+            var queueWasFull = !this.queueReady();
+            
+            // извлекаем команду из очереди
             var cmd = cmdQueue.shift();
             if(cmd != undefined) {
                 _writeCmd(cmd.cmd, cmd.params, cmd.onResult);
+                
+                if(queueWasFull) {
+                    // очередь была заполнена, а теперь освободилась
+                    this.emit(BabblerEvent.QUEUE_READY);
+                }
             }
         }
-    }
+    }.bind(this);
     
     /**
      * Выполнить команду на устройстве.
@@ -929,10 +965,83 @@ function BabblerDevice(onStatusChange) {
      * true: устройство подключено, но не прислало ответ 
      *     на последнюю команду вовремя
      * false: устройство подключено, ответ на последнюю 
-     *     команду пришел во время 
+     *     команду пришел вовремя 
      */
     this.deviceTimeoutFlag = function() {
         return _deviceTimeout;
+    }
+    
+    ///////////////////////////////////////////
+    // Управление очередью команд
+    
+    /** 
+     * Максимальное количество элементов в очереди
+     * команд, 0 - без ограничения
+     */
+    this.setQueueLimit = function(limit) {
+        _queueLimit = limit >= 0 ? limit : 0;
+        
+        if(this.queueReady()) {
+            this.emit(BabblerEvent.QUEUE_READY);
+        } else {
+            this.emit(BabblerEvent.QUEUE_FULL);
+        }
+    }
+    
+    /** 
+     * Максимальное количество элементов в очереди
+     * команд, 0 - без ограничения
+     */
+    this.getQueueLimit = function(limit) {
+        return _queueLimit;
+    }
+    
+    /**
+     * Количество команд в очереди на отправку.
+     */
+    this.queueLength = function() {
+        return cmdQueue.length;
+    }
+    
+    /**
+     * Готова ли очередь принимать новые команды:
+     * true - очередь готова принимать команды (количество команд в очереди
+     *     меньше, чем значение queueLimit, или размер очереди не ограничен)
+     * false - очередь переполнена (не готова принимать новые команды:
+     *     количество команд в очереди больше или равно queueLimit).
+     */
+    this.queueReady = function() {
+        // _queueLimit == 0: размер очереди не ограничен
+        return (_queueLimit == 0 || cmdQueue.length < _queueLimit);
+    }
+    
+    /**
+     * Очисить очередь команд - отменить все команды, которые не были
+     * отправлены на устройство. Каждая команда ошибку BblrDiscardedError.
+     */
+    this.discardQueue = function() {
+        // сначала запомним, была ли очередь переполнена
+        var queueWasFull = !this.queueReady();
+    
+        // обнуляем команды в очереди на отправку -
+        // возвращаем ошибки
+        for(var i in cmdQueue) {
+            var cmdInfo = cmdQueue[i];
+            // извещаем отправившего команду
+            cmdInfo.onResult(new BblrDiscardedError(), undefined, cmdInfo.cmd, cmdInfo.params);
+            // остальных тоже известим, что команда так и не ушла из очереди
+            this.emit(
+               BabblerEvent.DATA_ERROR, 
+               JSON.stringify({cmd: cmdInfo.cmd, params: cmdInfo.params}), 
+               DataFlow.QUEUE,
+               new BblrDiscardedError());
+        }
+        cmdQueue = [];
+        
+        if(queueWasFull) {
+            // очередь была заполнена, а теперь освободилась
+            this.emit(BabblerEvent.QUEUE_READY);
+        }
     }
 }
 
@@ -946,9 +1055,6 @@ BabblerDevice.Event = BabblerEvent;
 // Перечисления и константы для публики
 /** Статусы устройства: отключено, подключаемся, подключено */
 BabblerDevice.Status = DeviceStatus;
-
-/** Статусы очереди команд: готова (принимать команды), переполнена */
-BabblerDevice.QueueStatus = QueueStatus;
 
 /** Направление потока данных */
 BabblerDevice.DataFlow = DataFlow;
