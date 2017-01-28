@@ -361,9 +361,13 @@ function BabblerFakeDevice(name, options) {
                 params: cmd.params,
                 reply: reply
             });
-        
-            // типа сразу пришел ответ
-            this.emit('data', replyPack);
+            
+            var delay = 200;
+            // типа немного поработали перед тем, как
+            // отправить ответ
+            setTimeout(function() {
+                this.emit('data', replyPack);
+            }.bind(this), delay);
         }
     }
 }
