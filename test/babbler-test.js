@@ -151,6 +151,31 @@ exports.ConnectionLifecycle = {
         // подключаемся к устройству - ожидаем колбэки
         babbler.connect(portName);
     },
+    "Basic props": function(test) {
+        // сколько будет тестов
+        test.expect(4);
+        
+        var BabblerDevice = require('../src/babbler');
+        var babbler = new BabblerDevice();
+        
+        babbler.on('connected', function() {
+            test.equals(babbler.deviceName, portName, "Dev name should be: " + portName);
+            test.equals(babbler.deviceStatus, "connected", "Dev status should be: 'connected'");
+            test.equals(babbler.deviceError, undefined, "Dev err should be: undefined");
+            test.ok(!babbler.deviceTimeoutFlag, "Dev timeout flag should be: false");
+            
+            // подключились - отключаемся
+            babbler.disconnect();
+        });
+        
+        babbler.on('disconnected', function(err) {
+            // закончили здесь
+            test.done();
+        });
+        
+        // подключаемся к устройству - ожидаем колбэки
+        babbler.connect(portName);
+    },
     "Test commands": function(test) {
         // сколько будет тестов
         test.expect(15);
@@ -220,8 +245,8 @@ exports.ConnectionLifecycle = {
         var dev = new BabblerFakeDevice("/dev/ttyUSB0");
         
         // ограничим очередь 3мя командами
-        babbler.setQueueLimit(3);
-        test.equal(babbler.getQueueLimit(), 3, "Queue limit is 3");
+        babbler.queueLimit = 3;
+        test.equal(babbler.queueLimit, 3, "Queue limit is 3");
         
         // сюда прилетим при попытке отправить 4ю команду
         babbler.on('queue_full', function() {
@@ -242,7 +267,7 @@ exports.ConnectionLifecycle = {
             // (чтобы эксперимент удался, устройство не 
             // должно выполнить 1ю команду и прислать ответ до 
             // того, как в очередь будут добавлены все команды)
-            test.equal(babbler.queueLength(), 0, "Queue is empty");
+            test.equal(babbler.queueLength, 0, "Queue is empty");
             
             // ошибки Discarded должны прилететь после того, как 
             // вручную очистим очередь babbler.discardQueue()
@@ -253,7 +278,7 @@ exports.ConnectionLifecycle = {
                         "Cmd should fail with 'Discarded' error: " + err);
                 }
             );
-            test.equal(babbler.queueLength(), 1, "Queue length is 1");
+            test.equal(babbler.queueLength, 1, "Queue length is 1");
             babbler.sendCmd("laze", [],
                 // onResult
                 function(err, reply, cmd, params) {
@@ -261,8 +286,8 @@ exports.ConnectionLifecycle = {
                         "Cmd should fail with 'Discarded' error: " + err);
                 }
             );
-            test.equal(babbler.queueLength(), 2, "Queue length is 2");
-            test.ok(babbler.queueReady(), "Queue is READY");
+            test.equal(babbler.queueLength, 2, "Queue length is 2");
+            test.ok(babbler.queueReady, "Queue is READY");
             
             babbler.sendCmd("laze", [],
                 // onResult
@@ -271,8 +296,8 @@ exports.ConnectionLifecycle = {
                         "Cmd should fail with 'Discarded' error: " + err);
                 }
             );
-            test.equal(babbler.queueLength(), 3, "Queue length is 3");
-            test.ok(!babbler.queueReady(), "Queue is FULL");
+            test.equal(babbler.queueLength, 3, "Queue length is 3");
+            test.ok(!babbler.queueReady, "Queue is FULL");
             
             // добавляем 4ю команду в очередь - 
             // выходим за пределы максимального размера очереди:
@@ -285,16 +310,16 @@ exports.ConnectionLifecycle = {
                         "Cmd should fail with 'Queue full' error: " + err);
                 }
             );
-            test.equal(babbler.queueLength(), 3, "Queue length is still 3");
-            test.ok(!babbler.queueReady(), "Queue is FULL");
+            test.equal(babbler.queueLength, 3, "Queue length is still 3");
+            test.ok(!babbler.queueReady, "Queue is FULL");
             
             // очистим очередь - должны прилететь ошибки на неотправленные команды
             // и событие on('queue_ready')
             babbler.discardQueue();
             
             // очередь опять пустая
-            test.equal(babbler.queueLength(), 0, "Queue is empty again");
-            test.ok(babbler.queueReady(), "Queue is READY");
+            test.equal(babbler.queueLength, 0, "Queue is empty again");
+            test.ok(babbler.queueReady, "Queue is READY");
             
             // отключаемся
             babbler.disconnect();

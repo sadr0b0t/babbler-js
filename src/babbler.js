@@ -396,10 +396,13 @@ function BabblerDevice(onStatusChange) {
      * подключены или пытались подключиться.
      */
     var _deviceName = undefined;
+    
     /** Статус подключения к устройству */
     var _deviceStatus = DeviceStatus.DISCONNECTED;
+    
     /** Значение ошибки на случай неудачного подключения */
     var _deviceError = undefined;
+    
     /** 
      * Флаг таймаута: 
      * true: устройство подключено, но не прислало ответ 
@@ -444,6 +447,7 @@ function BabblerDevice(onStatusChange) {
     /** Счетчик для генерации идентификаторов отправляемых команд */
     var cmdId = 0;
     
+    // Идентификаторы таймеров регулярных задач, чтобы можно было остановить.
     
     /** на всякий случай прочищаем зависшие запросы раз в секунду */
     var validateIntId;
@@ -513,7 +517,8 @@ function BabblerDevice(onStatusChange) {
     }
     
     /**
-     * Установить статус устройства: отключено, подключено, подключаемся.
+     * Установить статус устройства: отключено, подключено, подключаемся
+     * (disconnected, connected, connecting).
      * @emits module:babbler-js#status
      * @emits module:babbler-js#disconnected
      * @emits module:babbler-js#connecting
@@ -905,7 +910,7 @@ function BabblerDevice(onStatusChange) {
         // и отправлять ответы.
         if(cmdResultCallbackQueue.length == 0) {
             // запомним, была ли очередь переполнена
-            var queueWasFull = !this.queueReady();
+            var queueWasFull = !this.queueReady;
             
             // извлекаем команду из очереди
             var cmd = cmdQueue.shift();
@@ -942,82 +947,96 @@ function BabblerDevice(onStatusChange) {
     ///////////////////////////////////////////
     // Статус устройства на публику
     
-    /** 
-     * Имя устройства, к которому были последний раз 
-     * подключены или пытались подключиться.
-     */
-    this.deviceName = function() {
-        return _deviceName;
-    }
-    
-    /**
-     * Текущий статус устройства: не подключено, подключаемся, подключено.
-     */
-    this.deviceStatus = function() {
-        return _deviceStatus;
-    }
-    
-    /**
-     * Ошибка устройства (почему не получилось подключиться), если есть.
-     */
-    this.deviceError = function() {
-        return _deviceError;
-    }
-    
-    /** 
-     * Флаг таймаута: 
-     * true: устройство подключено, но не прислало ответ 
-     *     на последнюю команду вовремя
-     * false: устройство подключено, ответ на последнюю 
-     *     команду пришел вовремя 
-     */
-    this.deviceTimeoutFlag = function() {
-        return _deviceTimeout;
-    }
+    Object.defineProperties(this, {
+        /** 
+         * Имя устройства, к которому были последний раз 
+         * подключены или пытались подключиться.
+         */
+        deviceName: {
+            get: function() {
+                return _deviceName;
+            }
+        },
+        
+        /**
+         * Текущий статус устройства: не подключено, подключаемся, подключено
+         * (disconnected, connecting, connected).
+         */
+        deviceStatus: {
+            get: function() {
+                return _deviceStatus;
+            }
+        },
+        
+        /**
+         * Ошибка устройства (почему не получилось подключиться), если есть.
+         */
+        deviceError: {
+            get: function() {
+                return _deviceError;
+            }
+        },
+        
+        /** 
+         * Флаг таймаута: 
+         * true: устройство подключено, но не прислало ответ 
+         *     на последнюю команду вовремя
+         * false: устройство подключено, ответ на последнюю 
+         *     команду пришел вовремя 
+         */
+        deviceTimeoutFlag: {
+            get: function() {
+                return _deviceTimeoutFlag;
+            }
+        }
+    });
     
     ///////////////////////////////////////////
     // Управление очередью команд
     
-    /** 
-     * Максимальное количество элементов в очереди
-     * команд, 0 - без ограничения
-     */
-    this.setQueueLimit = function(limit) {
-        _queueLimit = limit >= 0 ? limit : 0;
+    Object.defineProperties(this, {
+        /** 
+         * Максимальное количество элементов в очереди
+         * команд, 0 - без ограничения
+         */
+        queueLimit: {
+            get: function() {
+                return _queueLimit;
+            },
+            set: function(limit) {
+                _queueLimit = limit >= 0 ? limit : 0;
+                
+                if(this.queueReady) {
+                    this.emit(BabblerEvent.QUEUE_READY);
+                } else {
+                    this.emit(BabblerEvent.QUEUE_FULL);
+                }
+            }
+        },
         
-        if(this.queueReady()) {
-            this.emit(BabblerEvent.QUEUE_READY);
-        } else {
-            this.emit(BabblerEvent.QUEUE_FULL);
+        /**
+         * Количество команд в очереди на отправку.
+         */
+        queueLength: {
+            get: function() {
+                return cmdQueue.length;
+            }
+        },
+        
+        /**
+         * Готова ли очередь принимать новые команды:
+         * true - очередь готова принимать команды (количество команд в очереди
+         *     меньше, чем значение queueLimit, или размер очереди не ограничен)
+         * false - очередь переполнена (не готова принимать новые команды:
+         *     количество команд в очереди больше или равно queueLimit).
+         */
+        queueReady: {
+            get: function() {
+                // _queueLimit == 0: размер очереди не ограничен
+                return (_queueLimit == 0 || cmdQueue.length < _queueLimit);
+            }
         }
-    }
-    
-    /** 
-     * Максимальное количество элементов в очереди
-     * команд, 0 - без ограничения
-     */
-    this.getQueueLimit = function(limit) {
-        return _queueLimit;
-    }
-    
-    /**
-     * Количество команд в очереди на отправку.
-     */
-    this.queueLength = function() {
-        return cmdQueue.length;
-    }
-    
-    /**
-     * Готова ли очередь принимать новые команды:
-     * true - очередь готова принимать команды (количество команд в очереди
-     *     меньше, чем значение queueLimit, или размер очереди не ограничен)
-     * false - очередь переполнена (не готова принимать новые команды:
-     *     количество команд в очереди больше или равно queueLimit).
-     */
-    this.queueReady = function() {
-        // _queueLimit == 0: размер очереди не ограничен
-        return (_queueLimit == 0 || cmdQueue.length < _queueLimit);
-    }
+    });
     
     /**
      * Очисить очередь команд - отменить все команды, которые не были
@@ -1025,7 +1044,7 @@ function BabblerDevice(onStatusChange) {
      */
     this.discardQueue = function() {
         // сначала запомним, была ли очередь переполнена
-        var queueWasFull = !this.queueReady();
+        var queueWasFull = !this.queueReady;
     
         // обнуляем команды в очереди на отправку -
         // возвращаем ошибки
