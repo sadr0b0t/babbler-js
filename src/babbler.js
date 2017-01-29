@@ -71,7 +71,21 @@ const BabblerEvent = {
      * Очередь команд опять готова принимать команды после того,
      * как была переполнена 
      */
-    QUEUE_READY: "queue_ready"
+    QUEUE_READY: "queue_ready",
+    /**
+     * События для установленного подключения - флаги и значения,
+     * характеризующие "здоровье" устройства или канала связи.
+     * Значения - поля в параметре values обратного вызова.
+     * replyTimeout:
+     *   true: Устройство не отправило ответ во-время. 
+     *     Возможно, просто долго выполняло (следует исправить прошивку - команды
+     *     не должны выполняться дольше 5ти секунд), плохая связь, а возможно, зависло.
+     * 
+     *   false: Устройство прислало ответ вовремя после того, как был зафиксирован
+     *     таймаут ответа (значит связь опять налажена - это была частная проблема
+     *     какой-то команды).
+     */
+    HEALTH: "health"
 }
 
 // Ошибки по рекомендациям Мозилы
@@ -410,7 +424,7 @@ function BabblerDevice(onStatusChange) {
      * false: устройство подключено, ответ на последнюю 
      *     команду пришел во время 
      */
-    var _deviceTimeoutFlag = false;
+    var _replyTimeoutFlag = false;
     
     ///////////////////////////////////////////
     // Слушатели событий
@@ -489,9 +503,13 @@ function BabblerDevice(onStatusChange) {
                 JSON.stringify({cmd: callbackInfo.cmd, params: callbackInfo.params, id: callbackInfo.id}),
                 DataFlow.IN,
                 new BblrReplyTimeoutError()
-             );
-            // выставим флаг таймаута, пока без события
-            _deviceTimeoutFlag = true;
+            );
+            if(!_replyTimeoutFlag) {
+                // выставим флаг таймаута
+                _replyTimeoutFlag = true;
+                // и сгенерируем событие
+                this.emit(BabblerEvent.HEALTH, {replyTimeout: true});
+            }
         }
     }.bind(this);
     
@@ -667,10 +685,15 @@ function BabblerDevice(onStatusChange) {
                     if(callbackInfo.id == cmdReply.id) {
                         // колбэк нашелся
                         
-                        // значит устройство вовремя прислало корректные данные
-                        // в ответ на отправленный запрос:
-                        // снимем флаг таймаута, пока без события
-                        _deviceTimeoutFlag = false;
+                        
+                        if(_replyTimeoutFlag) {
+                            // значит устройство вовремя прислало корректные данные
+                            // в ответ на отправленный запрос:
+                            // снимем флаг таймаута
+                            _replyTimeoutFlag = false;
+                            // и сгенерируем событие
+                            this.emit(BabblerEvent.HEALTH, {replyTimeout: false});
+                        }
                         
                         // убираем из очереди
                         cmdResultCallbackQueue.splice(i, 1);
@@ -984,9 +1007,9 @@ function BabblerDevice(onStatusChange) {
          * false: устройство подключено, ответ на последнюю 
          *     команду пришел вовремя 
          */
-        deviceTimeoutFlag: {
+        replyTimeoutFlag: {
             get: function() {
-                return _deviceTimeoutFlag;
+                return _replyTimeoutFlag;
             }
         }
     });
@@ -1072,10 +1095,11 @@ function BabblerDevice(onStatusChange) {
 // генерировать события красиво
 inherits(BabblerDevice, EventEmitter);
 
+// Перечисления и константы для публики
+
 /** События */
 BabblerDevice.Event = BabblerEvent;
 
-// Перечисления и константы для публики
 /** Статусы устройства: отключено, подключаемся, подключено */
 BabblerDevice.Status = DeviceStatus;
 
