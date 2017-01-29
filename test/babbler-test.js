@@ -269,9 +269,6 @@ exports.ConnectionLifecycle = {
             }
         });
         
-        babbler.on('reply_ok', function() {
-        });
-        
         babbler.on('connected', function() {
             test.ok(true, "Connected ok");
             
