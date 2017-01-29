@@ -27,6 +27,8 @@ const BBLR_DEQUEUE_PERIOD = 200;
 /** Прочищаем зависшие запросы раз в секунду */
 const BBLR_VALIDATE_REPLY_CALLBACKS_PERIOD = 1000;
 
+/** Максимальный размер очереди команд по умолчанию */
+const BBLR_QUEUE_LIMIT = 5;
 
 /** Статусы устройства: отключено, подключаемся, подключено */
 const DeviceStatus = {
@@ -450,7 +452,7 @@ function Babbler(options) {
      * команд, 0 - без ограничения
      */
     var _queueLimit = (options != undefined && options.queueLimit != undefined) ? 
-        options.queueLimit : 5;
+        options.queueLimit : BBLR_QUEUE_LIMIT;
     
     /**
      * Очередь колбэков для ответов на отправленные команды
