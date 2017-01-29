@@ -47,7 +47,7 @@ const DataFlow = {
 
 /** 
  * События, на которые можно подписываться через интерфейс EventListener:
- *     BabblerDevice.on(event, callback);
+ *     Babbler.on(event, callback);
  */
 const BabblerEvent = {
     /** 
@@ -399,7 +399,7 @@ inherits(BabblerFakeDevice, EventEmitter);
  * @param {module:babbler-js~statusChangeCallback=} onStatusChange - обратный вызов 
  *     для получения обновлений статуса подключения к устройству.
  */
-function BabblerDevice(onStatusChange) {
+function Babbler(onStatusChange) {
     //http://phrogz.net/js/classes/OOPinJS.html
     
     ///////////////////////////////////////////
@@ -1091,31 +1091,31 @@ function BabblerDevice(onStatusChange) {
     }
 }
 
-// наследуем BabblerDevice от EventEmitter, чтобы
+// наследуем Babbler от EventEmitter, чтобы
 // генерировать события красиво
-inherits(BabblerDevice, EventEmitter);
+inherits(Babbler, EventEmitter);
 
 // Перечисления и константы для публики
 
 /** События */
-BabblerDevice.Event = BabblerEvent;
+Babbler.Event = BabblerEvent;
 
 /** Статусы устройства: отключено, подключаемся, подключено */
-BabblerDevice.Status = DeviceStatus;
+Babbler.Status = DeviceStatus;
 
 /** Направление потока данных */
-BabblerDevice.DataFlow = DataFlow;
+Babbler.DataFlow = DataFlow;
 
 /** Ошибки Error */
-BabblerDevice.BblrReplyTimeoutError = BblrReplyTimeoutError;
-BabblerDevice.BblrDisconnectedBeforeError = BblrDisconnectedBeforeError;
-BabblerDevice.BblrDisconnectedAfterError = BblrDisconnectedAfterError;
-BabblerDevice.BblrNotConnectedError = BblrNotConnectedError;
-BabblerDevice.BblrPortWriteError = BblrPortWriteError;
-BabblerDevice.BblrQueueFullError = BblrQueueFullError;
-BabblerDevice.BblrDiscardedError = BblrDiscardedError;
+Babbler.BblrReplyTimeoutError = BblrReplyTimeoutError;
+Babbler.BblrDisconnectedBeforeError = BblrDisconnectedBeforeError;
+Babbler.BblrDisconnectedAfterError = BblrDisconnectedAfterError;
+Babbler.BblrNotConnectedError = BblrNotConnectedError;
+Babbler.BblrPortWriteError = BblrPortWriteError;
+Babbler.BblrQueueFullError = BblrQueueFullError;
+Babbler.BblrDiscardedError = BblrDiscardedError;
 
 
 // отправляем компонент на публику
-module.exports = BabblerDevice;
+module.exports = Babbler;
 

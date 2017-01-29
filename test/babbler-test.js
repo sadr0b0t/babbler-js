@@ -91,8 +91,8 @@ exports.ConnectionLifecycle = {
         // сколько будет тестов
         test.expect(1);
         
-        var BabblerDevice = require('../src/babbler');
-        var babbler = new BabblerDevice();
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
         
         babbler.on('connecting', function() {
             test.ok(true, "Should try to connect here");
@@ -108,8 +108,8 @@ exports.ConnectionLifecycle = {
         // сколько будет тестов
         test.expect(3);
         
-        var BabblerDevice = require('../src/babbler');
-        var babbler = new BabblerDevice();
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
         
         babbler.on('connected', function() {
             test.ok(false, "Should not connect here");
@@ -134,8 +134,8 @@ exports.ConnectionLifecycle = {
         // сколько будет тестов
         test.expect(3);
         
-        var BabblerDevice = require('../src/babbler');
-        var babbler = new BabblerDevice();
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
         
         babbler.on('connected', function() {
             test.ok(true, "Connected ok");
@@ -159,8 +159,8 @@ exports.ConnectionLifecycle = {
         // сколько будет тестов
         test.expect(4);
         
-        var BabblerDevice = require('../src/babbler');
-        var babbler = new BabblerDevice();
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
         
         babbler.on('connected', function() {
             test.equals(babbler.deviceName, portName, "Dev name should be: " + portName);
@@ -185,8 +185,8 @@ exports.ConnectionLifecycle = {
         // сколько будет тестов
         test.expect(15);
         
-        var BabblerDevice = require('../src/babbler');
-        var babbler = new BabblerDevice();
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
         
         babbler.on('connected', function() {
             test.ok(true, "Connected ok");
@@ -245,8 +245,8 @@ exports.ConnectionLifecycle = {
         // сколько будет тестов
         test.expect(7);
         
-        var BabblerDevice = require('../src/babbler');
-        var babbler = new BabblerDevice();
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
         var dev = new BabblerFakeDevice("/dev/ttyUSB0");
         
         var expectReplyTimeoutTrue = false;
@@ -278,7 +278,7 @@ exports.ConnectionLifecycle = {
             babbler.sendCmd("delay", ["6000"],
                 // onResult
                 function(err, reply, cmd, params) {
-                    test.ok(err instanceof BabblerDevice.BblrReplyTimeoutError,
+                    test.ok(err instanceof Babbler.BblrReplyTimeoutError,
                         "Cmd should fail with 'Timeout' error: " + err);
                     test.equal(reply, undefined, "And reply is 'undefined'");
                 }
@@ -312,8 +312,8 @@ exports.ConnectionLifecycle = {
         // сколько будет тестов
         test.expect(17);
         
-        var BabblerDevice = require('../src/babbler');
-        var babbler = new BabblerDevice();
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
         var dev = new BabblerFakeDevice("/dev/ttyUSB0");
         
         // ограничим очередь 3мя командами
@@ -346,7 +346,7 @@ exports.ConnectionLifecycle = {
             babbler.sendCmd("delay", [],
                 // onResult
                 function(err, reply, cmd, params) {
-                    test.ok(err instanceof BabblerDevice.BblrDiscardedError,
+                    test.ok(err instanceof Babbler.BblrDiscardedError,
                         "Cmd should fail with 'Discarded' error: " + err);
                 }
             );
@@ -354,7 +354,7 @@ exports.ConnectionLifecycle = {
             babbler.sendCmd("delay", [],
                 // onResult
                 function(err, reply, cmd, params) {
-                    test.ok(err instanceof BabblerDevice.BblrDiscardedError,
+                    test.ok(err instanceof Babbler.BblrDiscardedError,
                         "Cmd should fail with 'Discarded' error: " + err);
                 }
             );
@@ -364,7 +364,7 @@ exports.ConnectionLifecycle = {
             babbler.sendCmd("delay", [],
                 // onResult
                 function(err, reply, cmd, params) {
-                    test.ok(err instanceof BabblerDevice.BblrDiscardedError,
+                    test.ok(err instanceof Babbler.BblrDiscardedError,
                         "Cmd should fail with 'Discarded' error: " + err);
                 }
             );
@@ -378,7 +378,7 @@ exports.ConnectionLifecycle = {
             babbler.sendCmd("delay", [],
                 // onResult
                 function(err, reply, cmd, params) {
-                    test.ok(err instanceof BabblerDevice.BblrQueueFullError, 
+                    test.ok(err instanceof Babbler.BblrQueueFullError, 
                         "Cmd should fail with 'Queue full' error: " + err);
                 }
             );

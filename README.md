@@ -23,8 +23,8 @@ alt="Babbler.js управление Arduino через последовател
 ## Basic usage:
 
 ~~~javascript
-var BabblerDevice = require('babbler-js');
-var babbler = new BabblerDevice();
+var Babbler = require('babbler-js');
+var babbler = new Babbler();
 
 babbler.on('connected', function() {
     console.log("connected");
