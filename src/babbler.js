@@ -247,6 +247,13 @@ const BBLR_CMD_PING = "ping";
  */
  
 /**
+ * Настройки системы взаимодействия с устройством Babbler.
+ * @typedef {Object} babblerOptions
+ * @property {number} [queueLimit=5] - максимальное количество элементов в очереди
+ *     команд, 0 - без ограничения
+ */
+ 
+/**
  * @typedef {Object} openOptions
  * @property {number} [baudRate=9600] The baud rate of the port to be opened. This 
  *     should match one of commonly available baud rates, such as 110, 300, 1200, 2400, 4800, 9600, 
@@ -389,17 +396,18 @@ inherits(BabblerFakeDevice, EventEmitter);
 
 
 /**
- * Создать экземпляр устройства - плата с прошивкой на основе библиотеки babbler_h.
+ * Создать экземпляр устройства - плата с прошивкой на основе библиотеки babbler_h
+ * https://github.com/1i7/babbler_h .
+ * 
  * Варианты подключений:
  * - последовательный порт,
  * - заглушка-симуляция для тестов.
  * 
- * https://github.com/1i7/babbler_h
- *
- * @param {module:babbler-js~statusChangeCallback=} onStatusChange - обратный вызов 
- *     для получения обновлений статуса подключения к устройству.
+ * @param {module:babbler-js~babblerOptions=} options - настройки системы взаимодействия:
+ * @param {number} [options.queueLimit=5] - максимальное количество элементов в очереди
+ *     команд, 0 - без ограничения
  */
-function Babbler(onStatusChange) {
+function Babbler(options) {
     //http://phrogz.net/js/classes/OOPinJS.html
     
     ///////////////////////////////////////////
@@ -427,13 +435,6 @@ function Babbler(onStatusChange) {
     var _replyTimeoutFlag = false;
     
     ///////////////////////////////////////////
-    // Слушатели событий
-    // подпишем слушателя статуса устройства из конструктора
-    if(onStatusChange != undefined) {
-        this.on(BabblerEvent.STATUS, onStatusChange);
-    }
-    
-    ///////////////////////////////////////////
     // Внутренняя кухня
     /** Устройство */
     var dev = undefined;
@@ -448,7 +449,8 @@ function Babbler(onStatusChange) {
      * Максимальное количество элементов в очереди
      * команд, 0 - без ограничения
      */
-    var _queueLimit = 5;
+    var _queueLimit = (options != undefined && options.queueLimit != undefined) ? 
+        options.queueLimit : 5;
     
     /**
      * Очередь колбэков для ответов на отправленные команды
@@ -459,7 +461,7 @@ function Babbler(onStatusChange) {
     var cmdResultCallbackQueue = [];
     
     /** Счетчик для генерации идентификаторов отправляемых команд */
-    var cmdId = 0;
+    var nextCmdId = 0;
     
     // Идентификаторы таймеров регулярных задач, чтобы можно было остановить.
     
@@ -806,12 +808,12 @@ function Babbler(onStatusChange) {
     var _writeCmd = function(cmd, params, onResult) {
         // отправляем команду напрямую на устройство
         if(dev != undefined && dev.ready()) {
-            cmdId++;
+            nextCmdId++;
             // добавим колбэк на получение ответа в очередь
             cmdResultCallbackQueue.push({
                 cmd: cmd,
                 params: params,
-                id: cmdId.toString(),
+                id: nextCmdId.toString(),
                 timestamp: Date.now(),
                 onResult: onResult
             });
@@ -820,7 +822,7 @@ function Babbler(onStatusChange) {
             var data = JSON.stringify({
                 cmd: cmd,
                 params: params,
-                id: cmdId.toString()
+                id: nextCmdId.toString()
             });
             dev.write(data,
                 function(err) {

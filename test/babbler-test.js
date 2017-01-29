@@ -163,9 +163,9 @@ exports.ConnectionLifecycle = {
         var babbler = new Babbler();
         
         babbler.on('connected', function() {
-            test.equals(babbler.deviceName, portName, "Dev name should be: " + portName);
-            test.equals(babbler.deviceStatus, "connected", "Dev status should be: 'connected'");
-            test.equals(babbler.deviceError, undefined, "Dev err should be: undefined");
+            test.equal(babbler.deviceName, portName, "Dev name should be: " + portName);
+            test.equal(babbler.deviceStatus, "connected", "Dev status should be: 'connected'");
+            test.equal(babbler.deviceError, undefined, "Dev err should be: undefined");
             test.ok(babbler.replyTimeoutFlag === false, 
                 "Reply timeout flag should be: boolean and false");
             
@@ -180,6 +180,22 @@ exports.ConnectionLifecycle = {
         
         // подключаемся к устройству - ожидаем колбэки
         babbler.connect(portName);
+    },
+    "Constructor options": function(test) {
+        // сколько будет тестов
+        test.expect(2);
+        
+        var Babbler = require('../src/babbler');
+        
+        // значение по умолчанию
+        var babbler1 = new Babbler();
+        test.equal(babbler1.queueLimit, 5, "Default queueLimit is 5");
+        
+        // значение из конструктора
+        var babbler2 = new Babbler({queueLimit: 3});
+        test.equal(babbler2.queueLimit, 3, "Set queueLimit to 3");
+        
+        test.done();
     },
     "Test commands": function(test) {
         // сколько будет тестов
@@ -290,7 +306,7 @@ exports.ConnectionLifecycle = {
             babbler.sendCmd("delay", ["3000"],
                 // onResult
                 function(err, reply, cmd, params) {
-                    test.equals(err, undefined, "No errors: " + err);
+                    test.equal(err, undefined, "No errors: " + err);
                     test.equal(reply, "ok", "And reply is 'ok'");
                     
                     // отключаемся
