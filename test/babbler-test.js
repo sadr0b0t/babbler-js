@@ -23,7 +23,7 @@ function BabblerFakeDevice(name, options) {
     
     // SerialPort.open
     this.open = function(callback) {
-        if(portName === "/dev/ttyUSB0") {
+        if(portName === "/dev/ttyUSB0" || portName === "/dev/readonly") {
             this.opened = true;
             callback();
             this.emit('open');
@@ -35,7 +35,13 @@ function BabblerFakeDevice(name, options) {
     // SerialPort.close
     this.close = function(callback) {
         this.opened = false;
-        callback();
+        if(callback != undefined) {
+            callback();
+        }
+    }
+    
+    this.unplug = function() {
+        this.close();
         this.emit('disconnect');
     }
     
@@ -43,38 +49,40 @@ function BabblerFakeDevice(name, options) {
     this.write = function(data, callback) {
         if(!this.opened) {
             callback(new Error("Dev not opened"));
+        } else if(portName === "/dev/readonly") {
+            callback(new Error("Access denied for write to " + "/dev/readonly"));
         } else {
             // парсим строку в объект
-                cmd = JSON.parse(data);
-                
-                var reply = "dontunderstand";
-                var delay = 100;
-                if(cmd.cmd === "ping") {
-                    reply = "ok";
-                } else if(cmd.cmd === "help") {
-                    reply = "ping help";
-                } else if(cmd.cmd === "delay") {
-                    // долгая команда
-                    if(cmd.params != undefined && cmd.params.length > 0) {
-                        delay = parseInt(cmd.params[0], 10);
-                    } else {
-                        delay = 6000;
-                    }
-                    reply = "ok";
-                }
-                
-                var replyPack = JSON.stringify({
-                    id: cmd.id.toString(),
-                    cmd: cmd.cmd,
-                    params: cmd.params,
-                    reply: reply
-                });
+            cmd = JSON.parse(data);
             
-                // типа немного поработали перед тем, как
-                // отправить ответ
-                setTimeout(function() {
-                    this.emit('data', replyPack);
-                }.bind(this), delay);
+            var reply = "dontunderstand";
+            var delay = 100;
+            if(cmd.cmd === "ping") {
+                reply = "ok";
+            } else if(cmd.cmd === "help") {
+                reply = "ping help delay";
+            } else if(cmd.cmd === "delay") {
+                // долгая команда
+                if(cmd.params != undefined && cmd.params.length > 0) {
+                    delay = parseInt(cmd.params[0], 10);
+                } else {
+                    delay = 6000;
+                }
+                reply = "ok";
+            }
+            
+            var replyPack = JSON.stringify({
+                id: cmd.id.toString(),
+                cmd: cmd.cmd,
+                params: cmd.params,
+                reply: reply
+            });
+        
+            // типа немного поработали перед тем, как
+            // отправить ответ
+            setTimeout(function() {
+                this.emit('data', replyPack);
+            }.bind(this), delay);
         }
     }
 }
@@ -121,7 +129,7 @@ exports.ConnectionLifecycle = {
 
         babbler.on('disconnected', function(err) {
             test.ok(true, "Disconnected here");
-            test.ok(err != undefined, "Error defined: " + err.message);
+            test.ok(err != undefined, "Error defined: " + err);
             
             // закончили здесь
             test.done();
@@ -197,6 +205,174 @@ exports.ConnectionLifecycle = {
         
         test.done();
     },
+    "Babbler.connect callback - success": function(test) {
+        // сколько будет тестов
+        test.expect(2);
+        
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
+        
+        babbler.on('disconnected', function(err) {
+            // закончили здесь
+            test.done();
+        });
+        
+        // подключаемся к устройству - ожидаем прямой колбэк
+        // на удачное подключение или ошибку
+        
+        // ожидаем удачное подключение
+        babbler.connect(portName, function(err) {
+            test.ok(true, "Connected ok: " + portName);
+            test.ifError(err, "No errors");
+            
+            // отключаемся
+            babbler.disconnect();
+        });
+    },
+    
+    
+    "Babbler.connect callback - AlreadyConnectedError": function(test) {
+        // сколько будет тестов
+        test.expect(4);
+        
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
+        
+        babbler.on('disconnected', function(err) {
+            // закончили здесь
+            test.done();
+        });
+        
+        // подключаемся к устройству - ожидаем прямой колбэк
+        // на удачное подключение или ошибку
+        
+        // ожидаем удачное подключение
+        babbler.connect(portName, function(err) {
+            test.ok(true, "Connected ok: " + portName);
+            test.ifError(err, "No errors");
+            
+            // подключаемся еще раз - ожидаем
+            // неудачное подключение, т.к. уже подключены
+            babbler.connect(portName, function(err) {
+                test.ok(true, "Got callback for: " + portName);
+                test.ok(err instanceof Babbler.BblrAlreadyConnectedError, 
+                    "Not connected with AlreadyConnected error: " + err);
+                
+                // отключаемся
+                babbler.disconnect();
+            });
+        });
+    },
+    
+    "Babbler.connect callback - InvalidPortNameError": function(test) {
+        // сколько будет тестов
+        test.expect(2);
+        
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
+        
+        // подключаемся к устройству - ожидаем прямой колбэк
+        // на удачное подключение или ошибку
+        
+        // неудачное подключение - нет такого устройства
+        babbler.connect("    ", function(err) {
+            test.ok(true, "Got callback for: " + "'    '");
+            test.ok(err instanceof Babbler.BblrInvalidPortNameError, 
+                "Not connected with InvalidPortNameError error: " + err);
+            
+            // закончили здесь
+            test.done();
+        });
+    },
+    "Babbler.connect callback - open device error": function(test) {
+        // сколько будет тестов
+        test.expect(2);
+        
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
+        
+        // подключаемся к устройству - ожидаем прямой колбэк
+        // на удачное подключение или ошибку
+        
+        // неудачное подключение - нет такого устройства
+        babbler.connect("/dev/xxx", function(err) {
+            test.ok(true, "Got callback for: " + "/dev/xxx");
+            test.ok(err instanceof Error, 
+                "Not connected with error: " + err);
+            
+            // закончили здесь
+            test.done();
+        });
+    },
+    "Babbler.connect callback - read-only device": function(test) {
+        // сколько будет тестов
+        test.expect(2);
+        
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
+        
+        // подключаемся к устройству - ожидаем прямой колбэк
+        // на удачное подключение или ошибку
+        
+        // неудачное подключение - устройство существует, но
+        // не доступно для записи
+        babbler.connect("test:/dev/readonly", function(err) {
+            test.ok(true, "Got callback for: " + "/dev/readonly");
+            test.ok(err instanceof Babbler.BblrHandshakeFailError, 
+                "Not connected with error: " + err);
+            
+            // закончили здесь
+            test.done();
+        });
+    },
+
+    "Babbler.connect callback - cancel connection errors": function(test) {
+        // сколько будет тестов
+        test.expect(2);
+        
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
+        
+        // подключаемся к устройству - ожидаем прямой колбэк
+        // на удачное подключение или ошибку
+        
+        // неудачное подключение - отменим процесс подключения,
+        // не дожидаясь окончания
+        babbler.connect(portName, function(err) {
+            test.ok(true, "Got callback for: " + portName);
+            test.ok(err instanceof Babbler.BblrHandshakeFailError, 
+                "Not connected with error: " + err);
+            
+            // закончили здесь
+            test.done();
+        });
+        babbler.disconnect();
+    },
+    
+    "Babbler.connect callback - device unplugged errors": function(test) {
+        // сколько будет тестов
+        test.expect(2);
+        
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
+        var dev = new BabblerFakeDevice("/dev/ttyUSB0");
+        
+        // подключаемся к устройству - ожидаем прямой колбэк
+        // на удачное подключение или ошибку
+        
+        // неудачное подключение - оборвем процесс подключения,
+        // не дожидаясь окончания (симуляция выдернутого провода)
+        babbler.connect("test:/dev/ttyUSB0", {dev: dev}, function(err) {
+            test.ok(true, "Got callback for: " + "/dev/ttyUSB0");
+            test.ok(err instanceof Babbler.BblrHandshakeFailError, 
+                "Not connected with error: " + err);
+            
+            // закончили здесь
+            test.done();
+        });
+        dev.unplug();
+    },
+    
     "Test commands": function(test) {
         // сколько будет тестов
         test.expect(15);

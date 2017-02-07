@@ -93,6 +93,8 @@ const BabblerEvent = {
 // Ошибки по рекомендациям Мозилы
 // https://developer.mozilla.org/ru/docs/Web/JavaScript/Reference/Global_Objects/Error
 
+// Ошибки команд
+
 /** Ошибка команды: таймаут */
 const BBLR_ERROR_REPLY_TIMEOUT = "Reply timeout";
 function BblrReplyTimeoutError(message) {
@@ -163,6 +165,17 @@ function BblrDiscardedError(message) {
 BblrDiscardedError.prototype = Object.create(Error.prototype);
 BblrDiscardedError.prototype.constructor = BblrDiscardedError;
 
+// Ошибки подключения
+
+/** Пытаемся подключиться, когда уже подключены */
+const BBLR_ERROR_ALREADY_CONNECTED = "Already connected"
+function BblrAlreadyConnectedError(message) {
+  this.name = 'BblrAlreadyConnectedError';
+  this.message = message || BBLR_ERROR_ALREADY_CONNECTED;
+  this.stack = (new Error()).stack;
+}
+BblrAlreadyConnectedError.prototype = Object.create(Error.prototype);
+BblrAlreadyConnectedError.prototype.constructor = BblrAlreadyConnectedError;
 
 /** Неправильное имя порта устройства */
 const BBLR_ERROR_INVALID_PORT_NAME = "Invalid port name"
@@ -173,6 +186,26 @@ function BblrInvalidPortNameError(message) {
 }
 BblrInvalidPortNameError.prototype = Object.create(Error.prototype);
 BblrInvalidPortNameError.prototype.constructor = BblrInvalidPortNameError;
+
+/** Устройство отключилось по внешним причинам (выдернут провод) */
+const BBLR_ERROR_DEVICE_UNPLUGGED = "Device unplugged"
+function BblrDeviceUnpluggedError(message) {
+  this.name = 'BblrDeviceUnpluggedError';
+  this.message = message || BBLR_ERROR_DEVICE_UNPLUGGED;
+  this.stack = (new Error()).stack;
+}
+BblrDeviceUnpluggedError.prototype = Object.create(Error.prototype);
+BblrDeviceUnpluggedError.prototype.constructor = BblrDeviceUnpluggedError;
+
+/** Устройство отключилось по вызову пользователя disconnect */
+const BBLR_ERROR_HANDSHAKE_FAIL = "Handshake fail"
+function BblrHandshakeFailError(message) {
+  this.name = 'BblrHandshakeFailError';
+  this.message = message || BBLR_ERROR_HANDSHAKE_FAIL;
+  this.stack = (new Error()).stack;
+}
+BblrHandshakeFailError.prototype = Object.create(Error.prototype);
+BblrHandshakeFailError.prototype.constructor = BblrHandshakeFailError;
 
 /** Команда ping */
 const BBLR_CMD_PING = "ping";
@@ -274,6 +307,13 @@ const BBLR_CMD_PING = "ping";
  */
  
 /**
+ * A callback called with an error or null.
+ * @typedef {function} errorCallback
+ * @param {?error} err
+ * https://github.com/EmergingTechnologyAdvisors/node-serialport/blob/master/lib/serialport.js#L55
+ */
+ 
+/**
  * Информация об обратном вызове для отправленной команды, ожидающей ответа от устройства.
  * @typedef {Object} cmdCallbackInfo
  * @property {string} cmd - имя команды
@@ -338,17 +378,17 @@ function BabblerFakeDevice(name, options) {
     var portName = name;
     var portOptions = options;
     
-    var opened = false;
+    this.opened = false;
 
     /** Устройство готово получать данные */
     this.ready = function() {
-        return opened;
+        return this.opened;
     }
     
     // SerialPort.open
     this.open = function(callback) {
-        if(portName === "/dev/ttyUSB0") {
-            opened = true;
+        if(portName === "/dev/ttyUSB0" || portName === "/dev/readonly") {
+            this.opened = true;
             callback();
             this.emit('open');
         } else {
@@ -358,24 +398,41 @@ function BabblerFakeDevice(name, options) {
     
     // SerialPort.close
     this.close = function(callback) {
-        opened = false;
-        callback();
+        this.opened = false;
+        if(callback != undefined) {
+            callback();
+        }
+    }
+    
+    this.unplug = function() {
+        this.close();
         this.emit('disconnect');
     }
     
     // SerialPort.write
     this.write = function(data, callback) {
-        if(!opened) {
+        if(!this.opened) {
             callback(new Error("Dev not opened"));
+        } else if(portName === "/dev/readonly") {
+            callback(new Error("Access denied for write to " + "/dev/readonly"));
         } else {
             // парсим строку в объект
             cmd = JSON.parse(data);
             
             var reply = "dontunderstand";
+            var delay = 100;
             if(cmd.cmd === "ping") {
                 reply = "ok";
             } else if(cmd.cmd === "help") {
-                reply = "ping help";
+                reply = "ping help delay";
+            } else if(cmd.cmd === "delay") {
+                // долгая команда
+                if(cmd.params != undefined && cmd.params.length > 0) {
+                    delay = parseInt(cmd.params[0], 10);
+                } else {
+                    delay = 6000;
+                }
+                reply = "ok";
             }
             
             var replyPack = JSON.stringify({
@@ -384,8 +441,7 @@ function BabblerFakeDevice(name, options) {
                 params: cmd.params,
                 reply: reply
             });
-            
-            var delay = 200;
+        
             // типа немного поработали перед тем, как
             // отправить ответ
             setTimeout(function() {
@@ -526,7 +582,7 @@ function Babbler(options) {
             // onResult
             function(err, reply, cmd, params) {
                 if(err) {
-                    _disconnect(err);
+                    this.disconnect(err);
                 } else {
                     // как минимум для последовательного порта
                     // здесь это делать не обязательно, т.к.
@@ -547,9 +603,9 @@ function Babbler(options) {
      * @emits module:babbler-js#connected
      */
     var _setDeviceStatus = function(status, error) {
-        _deviceError = error;
         if(_deviceStatus != status) {
             _deviceStatus = status;
+            _deviceError = error;
             
             // известим слушателей о смене статуса вообще
             this.emit(BabblerEvent.STATUS, status);
@@ -572,11 +628,30 @@ function Babbler(options) {
      *     ("/dev/ttyUSB0" в Linux, "COM1", "COM2" и т.п. в Windows)
      * @param {module:babbler-js~openOptions=} options - дополнительное настройки подключения:
      * @param {number} [options.baudRate] - скорость порта
-     *     
+     * @param {module:babbler-js~errorCallback} callback - обратный вызов:
+     *     соединение с устройством установлено или в процессе подключения произошла ошибка.
      */
-    this.connect = function(portName, options) {
+    this.connect = function(portName, options, callback) {
+        // посмотрим параметры
+        if(options instanceof Function) {
+            callback = options;
+            options = {};
+        }
+        
+        // прямой колбэк вызываем только один раз
+        if(callback) {
+            callback.called = false;
+        }
+        
         // не будем подключаться, если уже подключены
-        if(_deviceStatus !== DeviceStatus.DISCONNECTED) return;
+        if(_deviceStatus !== DeviceStatus.DISCONNECTED) {
+            // прямой колбэк из connect - не получилось подключиться
+            if(callback && !callback.called) {
+                callback.called = true;
+                callback(new BblrAlreadyConnectedError());
+            }
+            return;
+        }
         
         _deviceName = portName;
         
@@ -589,6 +664,11 @@ function Babbler(options) {
         if((portName ? portName.trim().length == 0 : true)) {
             _setDeviceStatus(DeviceStatus.DISCONNECTED, 
                 new BblrInvalidPortNameError(BBLR_ERROR_INVALID_PORT_NAME + ": '" + portName + "'"));
+            // прямой колбэк из connect - не получилось подключиться
+            if(callback && !callback.called) {
+                callback.called = true;
+                callback(new BblrInvalidPortNameError(BBLR_ERROR_INVALID_PORT_NAME + ": '" + portName + "'"));
+            }
             return;
         }
         
@@ -608,63 +688,6 @@ function Babbler(options) {
         // 
         // События
         // 
-
-        // устройство открылось для общения
-        dev.on('open', function () {
-            // порт открыт, но устройство может еще какое-то время тупить 
-            // до того, как начнет отвечать на запросы (или это может быть
-            // вообще неправильное устройство)
-             
-            // поэтому будем считать, что подключены, только после того, 
-            // как примем ответ на первый пинг
-            
-            // прочищаем зависшие запросы раз в секунду
-            validateIntId = setInterval(_validateReplyCallbacks, BBLR_VALIDATE_REPLY_CALLBACKS_PERIOD);
-            
-            // отправляем пинг напрямую, а не через очередь команд, т.к. 
-            // очередь в этот момент все равно пустая и не работает
-            var firstPing = function() {
-                _writeCmd(/*cmd*/ "ping", /*params*/ [],
-                    // onResult
-                    function(err, reply, cmd, params) {
-                        if(err) {
-                            // превышено время ожидаения ответа - пробуем еще раз до
-                            // тех пор, пока не подключимся или не отменим попытки
-                            if(_deviceStatus === DeviceStatus.CONNECTING && err instanceof BblrReplyTimeoutError) {
-                                firstPing();
-                            }
-                        } else {
-                            // пришел ответ - теперь точно подключены
-                            // (вообще, можно было бы проверить, что статус reply=='ok',
-                            // а не 'dontundertand' или 'error', но корректно сформированного
-                            // ответа, в общем, и так достаточно, будем прощать всякие 
-                            // косяки по максимуму)
-                            
-                            // отправлять команду на устройство раз в 200 миллисекунд (5 раз в секунду)
-                            // (на 100 миллисекундах команды начинают склеиваться)
-                            dequeueIntId = setInterval(_dequeueCmd, BBLR_DEQUEUE_PERIOD);
-                            
-                            // проверять статус устройства раз в 5 секунд
-                            // (при подключении через последовательный порт - это излишество,
-                            // если только обрабатывать случай, когда само устройство повисло
-                            // на какую-нибудь долгую задачу и не хочет отправлять ответы в 
-                            // установленное время)
-                            //checkAliveIntId = setInterval(_checkDeviceAlive, 5000);
-                            
-                            // обновим статус (на самом деле, устройство может еще 
-                            // какое-то время тупить до того, как начнет отвечать
-                            // на запросы)
-                            _setDeviceStatus(DeviceStatus.CONNECTED);
-                        }
-                    }
-                );
-            }
-            firstPing();
-            // поможет обойти баг на старых загрузчиках ChipKIT Uno32
-            // (если перепрошить нет возможности)
-            // см: http://chipkit.net/forum/viewtopic.php?f=19&t=3731&p=15573#p15573
-            //setTimeout(firstPing, 5000);
-        });
 
         // пришли данные
         dev.on('data', function(data) {
@@ -689,7 +712,6 @@ function Babbler(options) {
                     if(callbackInfo.id == cmdReply.id) {
                         // колбэк нашелся
                         
-                        
                         if(_replyTimeoutFlag) {
                             // значит устройство вовремя прислало корректные данные
                             // в ответ на отправленный запрос:
@@ -713,7 +735,20 @@ function Babbler(options) {
         
         // отключили устройство (выдернули провод)
         dev.on('disconnect', function () {
-            _disconnect(new Error("Device unplugged"));
+            // Сюда попадаем только, если соединение разорвано за пределами кода 
+            // Babbler (пользователь выдернул шнур).
+            // Из dev.close() в Babbler.disconnect (разрыв соединения пользователем) -
+            // сюда не попадаем.
+            // Поэтому ошибка "Device unplugged" при вызове Babbler.disconnect не появится.
+            _disconnect(new BblrDeviceUnpluggedError());
+            dev = undefined;
+            
+            // Порвали соединение до того, как успели подключиться:
+            // прямой колбэк из connect - не получилось подключиться
+            if(callback && !callback.called) {
+                callback.called = true;
+                callback(new BblrDeviceUnpluggedError());
+            }
         });
 
         // 
@@ -724,20 +759,93 @@ function Babbler(options) {
         dev.open(function(err) {
             if(err) {
                 // не получилось открыть порт
-                
                 // обновим статус
                 _setDeviceStatus(DeviceStatus.DISCONNECTED, err);
+                
+                // прямой колбэк из connect - не получилось подключиться
+                if(callback && !callback.called) {
+                    callback.called = true;
+                    callback(err);
+                }
+            } else {
+                // порт открыт, но устройство может еще какое-то время тупить 
+                // до того, как начнет отвечать на запросы (или это может быть
+                // вообще неправильное устройство)
+                 
+                // поэтому будем считать, что подключены, только после того, 
+                // как примем ответ на первый пинг
+                
+                // прочищаем зависшие запросы раз в секунду
+                validateIntId = setInterval(_validateReplyCallbacks, BBLR_VALIDATE_REPLY_CALLBACKS_PERIOD);
+                
+                // отправляем пинг напрямую, а не через очередь команд, т.к. 
+                // очередь в этот момент все равно пустая и не работает
+                var firstPing = function() {
+                    _writeCmd(/*cmd*/ "ping", /*params*/ [],
+                        // onResult
+                        function(err, reply, cmd, params) {
+                            if(err) {
+                                if(_deviceStatus === DeviceStatus.CONNECTING && err instanceof BblrReplyTimeoutError) {
+                                    // превышено время ожидаения ответа - пробуем еще раз до
+                                    // тех пор, пока не подключимся или не отменим попытки
+                                    firstPing();
+                                } else {
+                                    // другая ошибка отправки команды - прекращаем пробовать
+                                    // обновим статус
+                                    _setDeviceStatus(DeviceStatus.DISCONNECTED);
+                                    
+                                    // прямой колбэк из connect - неудачное подключение
+                                    if(callback && !callback.called) {
+                                        callback.called = true;
+                                        callback(new BblrHandshakeFailError(err));
+                                    }
+                                }
+                            } else {
+                                // пришел ответ - теперь точно подключены
+                                // (вообще, можно было бы проверить, что статус reply=='ok',
+                                // а не 'dontundertand' или 'error', но корректно сформированного
+                                // ответа, в общем, и так достаточно, будем прощать всякие 
+                                // косяки по максимуму)
+                                
+                                // отправлять команду на устройство раз в 200 миллисекунд (5 раз в секунду)
+                                // (на 100 миллисекундах команды начинают склеиваться)
+                                dequeueIntId = setInterval(_dequeueCmd, BBLR_DEQUEUE_PERIOD);
+                                
+                                // проверять статус устройства раз в 5 секунд
+                                // (при подключении через последовательный порт - это излишество,
+                                // если только обрабатывать случай, когда само устройство повисло
+                                // на какую-нибудь долгую задачу и не хочет отправлять ответы в 
+                                // установленное время)
+                                //checkAliveIntId = setInterval(_checkDeviceAlive, 5000);
+                                
+                                // обновим статус
+                                _setDeviceStatus(DeviceStatus.CONNECTED);
+                                
+                                // прямой колбэк из connect - удачное подключение
+                                if(callback && !callback.called) {
+                                    callback.called = true;
+                                    callback();
+                                }
+                            }
+                        }
+                    );
+                }
+                firstPing();
+                // поможет обойти баг на старых загрузчиках ChipKIT Uno32
+                // (если перепрошить нет возможности)
+                // см: http://chipkit.net/forum/viewtopic.php?f=19&t=3731&p=15573#p15573
+                //setTimeout(firstPing, 5000);
             }
         });
     }
     
     /**
-     * Отключиться от устройства
+     * Освободить ресурсы после отключения от устройства.
      * @param {?error} err - ошибка - причина отключения (необязательно)
      * @emits module:babbler-js#data_error
      */
     var _disconnect = function (err) {
-        // сначала сообщаем всем, чтобы 
+        // сначала сообщаем всем, чтобы
         // больше не дергали устройство
         _setDeviceStatus(DeviceStatus.DISCONNECTED, err);
         
@@ -785,6 +893,16 @@ function Babbler(options) {
                new BblrDisconnectedBeforeError());
         }
         cmdQueue = [];
+    }.bind(this);
+    
+    /**
+     * Отключиться от устройства
+     * @param {?error} err - ошибка - причина отключения (необязательно)
+     * @emits module:babbler-js#data_error
+     */
+    this.disconnect = function(err) {
+        // ставим статус, очищаем ресурсы
+        _disconnect(err);
         
         // закрываем порт
         if(dev != undefined && dev.ready()) {
@@ -793,13 +911,8 @@ function Babbler(options) {
                 //console.log(err);
             });
         }
-        port = undefined;
-    }.bind(this);
-    
-    /**
-     * Отключиться от устройства.
-     */
-    this.disconnect = _disconnect;
+        dev = undefined;
+    }
     
     /**
      * Отправить команду на устройство.
@@ -840,7 +953,7 @@ function Babbler(options) {
                             DataFlow.OUT, 
                             new BblrPortWriteError(BBLR_ERROR_WRITING_TO_PORT + ": " + err));
                         // отключаемся
-                        _disconnect(new BblrPortWriteError(BBLR_ERROR_WRITING_TO_PORT + ": " + err));
+                        this.disconnect(new BblrPortWriteError(BBLR_ERROR_WRITING_TO_PORT + ": " + err));
                         // персональная ошибка в onResult прилетит из _disconnect
                         //onResult(new BblrPortWriteError(BBLR_ERROR_WRITING_TO_PORT + ": " + err), undefined, cmd, params);
                     }
@@ -851,7 +964,7 @@ function Babbler(options) {
             // (вообще, это не должно произойти, т.к. мы ловим событие dev 'disconnect')
             this.emit(BabblerEvent.DATA_ERROR, data, DataFlow.OUT, new BblrNotConnectedError());
             // отключаемся
-            _disconnect(new BblrNotConnectedError());
+            this.disconnect(new BblrNotConnectedError());
             // персональная ошибка в onResult прилетит из _disconnect
             //onResult(new BblrNotConnectedError(), undefined, cmd, params);
         }
@@ -1118,6 +1231,10 @@ Babbler.BblrNotConnectedError = BblrNotConnectedError;
 Babbler.BblrPortWriteError = BblrPortWriteError;
 Babbler.BblrQueueFullError = BblrQueueFullError;
 Babbler.BblrDiscardedError = BblrDiscardedError;
+Babbler.BblrAlreadyConnectedError = BblrAlreadyConnectedError;
+Babbler.BblrInvalidPortNameError = BblrInvalidPortNameError;
+Babbler.BblrDeviceUnpluggedError = BblrDeviceUnpluggedError;
+Babbler.BblrHandshakeFailError = BblrHandshakeFailError;
 
 
 // отправляем компонент на публику
