@@ -14,7 +14,21 @@ function BabblerFakeDevice(name, options) {
     var portName = name;
     var portOptions = options;
     
+    var opening = false;
+    var closing = false;
+    
+    this.plugged = true;
     this.opened = false;
+    
+    var _error = function(error, callback) {
+        if (callback) {
+            callback(error);
+        }
+    };
+    
+    var _asyncError = function(error, callback) {
+        process.nextTick(() => _error(error, callback));
+    };
 
     /** Устройство готово получать данные */
     this.ready = function() {
@@ -23,26 +37,37 @@ function BabblerFakeDevice(name, options) {
     
     // SerialPort.open
     this.open = function(callback) {
-        if(portName === "/dev/ttyUSB0" || portName === "/dev/readonly") {
-            this.opened = true;
-            callback();
-            this.emit('open');
-        } else {
-            callback(new Error("Dev not found: " + portName));
-        }
+        if(this.opened) return _asyncError(new Error("Already opened"), callback);
+        if(opening) return _asyncError(new Error("Already opening"), callback);
+        if(closing) return _asyncError(new Error("We are closing"), callback);
+        
+        this.plugged = true;
+        opening = true;
+        // типа устройство откроется через некоторое время
+        setTimeout(function() {
+            if(this.plugged && (portName === "/dev/ttyUSB0" || portName === "/dev/readonly")) {
+                opening = false;
+                this.opened = true;
+                this.emit('open');
+                if(callback) {
+                    callback();
+                }
+            } else {
+                _error(new Error("Dev not found: " + portName), callback);
+            }
+        }.bind(this), 10);
     }
     
     // SerialPort.close
     this.close = function(callback) {
+        if(closing) return _asyncError(new Error("Already closing"), callback);
+        if(!this.opened) return _asyncError(new Error("Not opened"), callback);
+        
+        opening = false;
         this.opened = false;
-        if(callback != undefined) {
+        if(callback) {
             callback();
         }
-    }
-    
-    this.unplug = function() {
-        this.close();
-        this.emit('disconnect');
     }
     
     // SerialPort.write
@@ -85,6 +110,15 @@ function BabblerFakeDevice(name, options) {
             }.bind(this), delay);
         }
     }
+    
+    // симуляция выдернутого шнура
+    this.unplug = function() {
+        setTimeout(function() {
+            this.plugged = false;
+            this.close();
+            this.emit('disconnect');
+        }.bind(this), 10);
+    }
 }
 inherits(BabblerFakeDevice, EventEmitter);
 
@@ -112,6 +146,7 @@ exports.ConnectionLifecycle = {
         // подключаемся к устройству - ожидаем колбэки
         babbler.connect("/dev/xxx");
     },
+    
     "Device does not exist": function(test) {
         // сколько будет тестов
         test.expect(3);
@@ -138,6 +173,7 @@ exports.ConnectionLifecycle = {
         // подключаемся к устройству - ожидаем колбэки
         babbler.connect("/dev/xxx");
     },
+    
     "'connected'-'disconnected' events": function(test) {
         // сколько будет тестов
         test.expect(3);
@@ -163,6 +199,7 @@ exports.ConnectionLifecycle = {
         // подключаемся к устройству - ожидаем колбэки
         babbler.connect(portName);
     },
+    
     "Basic props": function(test) {
         // сколько будет тестов
         test.expect(4);
@@ -189,6 +226,7 @@ exports.ConnectionLifecycle = {
         // подключаемся к устройству - ожидаем колбэки
         babbler.connect(portName);
     },
+    
     "Constructor options": function(test) {
         // сколько будет тестов
         test.expect(2);
@@ -205,6 +243,7 @@ exports.ConnectionLifecycle = {
         
         test.done();
     },
+    
     "Babbler.connect callback - success": function(test) {
         // сколько будет тестов
         test.expect(2);
@@ -229,7 +268,6 @@ exports.ConnectionLifecycle = {
             babbler.disconnect();
         });
     },
-    
     
     "Babbler.connect callback - AlreadyConnectedError": function(test) {
         // сколько будет тестов
@@ -284,6 +322,7 @@ exports.ConnectionLifecycle = {
             test.done();
         });
     },
+    
     "Babbler.connect callback - open device error": function(test) {
         // сколько будет тестов
         test.expect(2);
@@ -304,6 +343,7 @@ exports.ConnectionLifecycle = {
             test.done();
         });
     },
+    
     "Babbler.connect callback - read-only device": function(test) {
         // сколько будет тестов
         test.expect(2);
@@ -325,8 +365,33 @@ exports.ConnectionLifecycle = {
             test.done();
         });
     },
-
-    "Babbler.connect callback - cancel connection errors": function(test) {
+    
+    "Babbler.connect callback - cancel connection immediately": function(test) {
+        // сколько будет тестов
+        test.expect(2);
+        
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
+        
+        // подключаемся к устройству - ожидаем прямой колбэк
+        // на удачное подключение или ошибку
+        
+        // неудачное подключение - отменим процесс подключения,
+        // не дожидаясь окончания
+        babbler.connect(portName, function(err) {
+            test.ok(true, "Got callback for: " + portName);
+            test.ok(err instanceof Babbler.BblrCancelOpenError, 
+                "Not connected with error: " + err);
+            
+            // закончили здесь
+            test.done();
+        });
+        // отменим подключение сразу - раньше, чем придет колбэк
+        // на dev.open с удачно открытым портом
+        babbler.disconnect();
+    },
+    
+    "Babbler.connect callback - cancel connection later (handshake)": function(test) {
         // сколько будет тестов
         test.expect(2);
         
@@ -346,16 +411,31 @@ exports.ConnectionLifecycle = {
             // закончили здесь
             test.done();
         });
-        babbler.disconnect();
+        
+        // оборвем соединение чуть позже - после того,
+        // связь с устройством установлена, но не завершилась 
+        // процедура Handshake
+        setTimeout(function() {
+            babbler.disconnect();
+        }, 11);
     },
     
-    "Babbler.connect callback - device unplugged errors": function(test) {
+    "Babbler.connect callback - device unplugged immediately": function(test) {
         // сколько будет тестов
         test.expect(2);
         
         var Babbler = require('../src/babbler');
         var babbler = new Babbler();
         var dev = new BabblerFakeDevice("/dev/ttyUSB0");
+        // симуляция выдернутого шнура - "выдергиваем" провод сразу,
+        // даже не дождавшись колбэка из dev.open
+        dev.unplug = function() {
+            //setTimeout(function() {
+                this.plugged = false;
+                this.close();
+                this.emit('disconnect');
+            //}.bind(this), 10);
+        }
         
         // подключаемся к устройству - ожидаем прямой колбэк
         // на удачное подключение или ошибку
@@ -364,7 +444,49 @@ exports.ConnectionLifecycle = {
         // не дожидаясь окончания (симуляция выдернутого провода)
         babbler.connect("test:/dev/ttyUSB0", {dev: dev}, function(err) {
             test.ok(true, "Got callback for: " + "/dev/ttyUSB0");
-            test.ok(err instanceof Babbler.BblrHandshakeFailError, 
+            
+            // ошибка BblrDeviceUnpluggedError более приоритетна, 
+            // чем BblrHandshakeFailError - получим именно ее
+            //test.ok(err instanceof Babbler.BblrHandshakeFailError, 
+            test.ok(err instanceof Babbler.BblrDeviceUnpluggedError,
+                "Not connected with error: " + err);
+            
+            // закончили здесь
+            test.done();
+        });
+        dev.unplug();
+    },
+    
+    "Babbler.connect callback - device unplugged later": function(test) {
+        // сколько будет тестов
+        test.expect(2);
+        
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
+        var dev = new BabblerFakeDevice("/dev/ttyUSB0");
+        // симуляция выдернутого шнура - "выдергиваем" провод немного позже,
+        // dev.open пришлет колбэк и начнет процедуру Handshake по отправке 
+        // первых пингов
+        dev.unplug = function() {
+            setTimeout(function() {
+                this.plugged = false;
+                this.close();
+                this.emit('disconnect');
+            }.bind(this), 10);
+        }
+        
+        // подключаемся к устройству - ожидаем прямой колбэк
+        // на удачное подключение или ошибку
+        
+        // неудачное подключение - оборвем процесс подключения,
+        // не дожидаясь окончания (симуляция выдернутого провода)
+        babbler.connect("test:/dev/ttyUSB0", {dev: dev}, function(err) {
+            test.ok(true, "Got callback for: " + "/dev/ttyUSB0");
+            
+            // ошибка BblrDeviceUnpluggedError более приоритетна, 
+            // чем BblrHandshakeFailError - получим именно ее
+            //test.ok(err instanceof Babbler.BblrHandshakeFailError, 
+            test.ok(err instanceof Babbler.BblrDeviceUnpluggedError, 
                 "Not connected with error: " + err);
             
             // закончили здесь
@@ -433,6 +555,7 @@ exports.ConnectionLifecycle = {
         // подключаемся к устройству - ожидаем колбэки
         babbler.connect(portName);
     },
+    
     "Device timeout": function(test) {
         // сколько будет тестов
         test.expect(7);
@@ -499,7 +622,8 @@ exports.ConnectionLifecycle = {
         
         // подключаемся к устройству - ожидаем колбэки
         babbler.connect("test:/dev/ttyUSB0", {dev: dev});
-    }, 
+    },
+    
     "Manage queue": function(test) {
         // сколько будет тестов
         test.expect(17);
@@ -597,8 +721,7 @@ exports.ConnectionLifecycle = {
         
         // подключаемся к устройству - ожидаем колбэки
         babbler.connect("test:/dev/ttyUSB0", {dev: dev});
-    },
-    
+    }
 };
 
 //////////////////

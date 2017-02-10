@@ -197,6 +197,16 @@ function BblrDeviceUnpluggedError(message) {
 BblrDeviceUnpluggedError.prototype = Object.create(Error.prototype);
 BblrDeviceUnpluggedError.prototype.constructor = BblrDeviceUnpluggedError;
 
+/** Отменили подключение до того, как успели подключиться */
+const BBLR_ERROR_CANCEL_OPEN = "Cancel open"
+function BblrCancelOpenError(message) {
+  this.name = 'BblrCancelOpenError';
+  this.message = message || BBLR_ERROR_CANCEL_OPEN;
+  this.stack = (new Error()).stack;
+}
+BblrCancelOpenError.prototype = Object.create(Error.prototype);
+BblrCancelOpenError.prototype.constructor = BblrCancelOpenError;
+
 /** Устройство отключилось по вызову пользователя disconnect */
 const BBLR_ERROR_HANDSHAKE_FAIL = "Handshake fail"
 function BblrHandshakeFailError(message) {
@@ -378,7 +388,21 @@ function BabblerFakeDevice(name, options) {
     var portName = name;
     var portOptions = options;
     
+    var opening = false;
+    var closing = false;
+    
+    this.plugged = true;
     this.opened = false;
+    
+    var _error = function(error, callback) {
+        if (callback) {
+            callback(error);
+        }
+    };
+    
+    var _asyncError = function(error, callback) {
+        process.nextTick(() => _error(error, callback));
+    };
 
     /** Устройство готово получать данные */
     this.ready = function() {
@@ -387,26 +411,37 @@ function BabblerFakeDevice(name, options) {
     
     // SerialPort.open
     this.open = function(callback) {
-        if(portName === "/dev/ttyUSB0" || portName === "/dev/readonly") {
-            this.opened = true;
-            callback();
-            this.emit('open');
-        } else {
-            callback(new Error("Dev not found: " + portName));
-        }
+        if(this.opened) return _asyncError(new Error("Already opened"), callback);
+        if(opening) return _asyncError(new Error("Already opening"), callback);
+        if(closing) return _asyncError(new Error("We are closing"), callback);
+        
+        this.plugged = true;
+        opening = true;
+        // типа устройство откроется через некоторое время
+        setTimeout(function() {
+            if(this.plugged && (portName === "/dev/ttyUSB0" || portName === "/dev/readonly")) {
+                opening = false;
+                this.opened = true;
+                this.emit('open');
+                if(callback) {
+                    callback();
+                }
+            } else {
+                _error(new Error("Dev not found: " + portName), callback);
+            }
+        }.bind(this), 10);
     }
     
     // SerialPort.close
     this.close = function(callback) {
+        if(closing) return _asyncError(new Error("Already closing"), callback);
+        if(!this.opened) return _asyncError(new Error("Not opened"), callback);
+        
+        opening = false;
         this.opened = false;
-        if(callback != undefined) {
+        if(callback) {
             callback();
         }
-    }
-    
-    this.unplug = function() {
-        this.close();
-        this.emit('disconnect');
     }
     
     // SerialPort.write
@@ -448,6 +483,15 @@ function BabblerFakeDevice(name, options) {
                 this.emit('data', replyPack);
             }.bind(this), delay);
         }
+    }
+    
+    // симуляция выдернутого шнура
+    this.unplug = function() {
+        setTimeout(function() {
+            this.plugged = false;
+            this.close();
+            this.emit('disconnect');
+        }.bind(this), 10);
     }
 }
 inherits(BabblerFakeDevice, EventEmitter);
@@ -496,6 +540,7 @@ function Babbler(options) {
     // Внутренняя кухня
     /** Устройство */
     var dev = undefined;
+    var devOpening = false;
     
     /** 
      * Очередь команд на отправку 
@@ -756,8 +801,33 @@ function Babbler(options) {
         //
 
         // открываем порт
+        devOpening = true;
         dev.open(function(err) {
-            if(err) {
+            //console.log("##opened: " + (dev ? "dev.ready=" + dev.ready() : "dev=undefined"));
+            var _devOpening = devOpening;
+            devOpening = false;
+            if(!_devOpening) {
+                // вызвали отключение disconnect до того, как пришел этот колбэк
+                
+                // закрываем порт здесь
+                if(dev != undefined && dev.ready()) {
+                    dev.close(function(_err) {
+                        // ошибки ловим, но игнорируем
+                        //console.log(_err);
+                    });
+                }
+                dev = undefined;
+                
+                // здесь этого делать не нужно, т.к. статус DISCONNECTED
+                // уже выставлен в disconnect
+                //_setDeviceStatus(DeviceStatus.DISCONNECTED, new BblrCancelOpenError());
+                
+                // прямой колбэк из connect - не получилось подключиться
+                if(callback && !callback.called) {
+                    callback.called = true;
+                    callback(new BblrCancelOpenError());
+                }
+            } else if(err) {
                 // не получилось открыть порт
                 // обновим статус
                 _setDeviceStatus(DeviceStatus.DISCONNECTED, err);
@@ -792,7 +862,7 @@ function Babbler(options) {
                                 } else {
                                     // другая ошибка отправки команды - прекращаем пробовать
                                     // обновим статус
-                                    _setDeviceStatus(DeviceStatus.DISCONNECTED);
+                                    this.disconnect(new BblrHandshakeFailError(err));
                                     
                                     // прямой колбэк из connect - неудачное подключение
                                     if(callback && !callback.called) {
@@ -827,17 +897,17 @@ function Babbler(options) {
                                     callback();
                                 }
                             }
-                        }
+                        }.bind(this)
                     );
-                }
+                }.bind(this);
                 firstPing();
                 // поможет обойти баг на старых загрузчиках ChipKIT Uno32
                 // (если перепрошить нет возможности)
                 // см: http://chipkit.net/forum/viewtopic.php?f=19&t=3731&p=15573#p15573
                 //setTimeout(firstPing, 5000);
             }
-        });
-    }
+        }.bind(this));
+    }.bind(this);
     
     /**
      * Освободить ресурсы после отключения от устройства.
@@ -869,7 +939,9 @@ function Babbler(options) {
         for(var i in cmdResultCallbackQueue) {
             var callbackInfo = cmdResultCallbackQueue[i];
             // извещаем отправившего команду
-            callbackInfo.onResult(new BblrDisconnectedAfterError(), undefined, callbackInfo.cmd, callbackInfo.params);
+            process.nextTick(function() {
+                callbackInfo.onResult(new BblrDisconnectedAfterError(), undefined, callbackInfo.cmd, callbackInfo.params);
+            });
             // остальных тоже известим, что ответа не дождемся
             this.emit(
                BabblerEvent.DATA_ERROR, 
@@ -884,7 +956,9 @@ function Babbler(options) {
         for(var i in cmdQueue) {
             var cmdInfo = cmdQueue[i];
             // извещаем отправившего команду
-            cmdInfo.onResult(new BblrDisconnectedBeforeError(), undefined, cmdInfo.cmd, cmdInfo.params);
+            process.nextTick(function() {
+                cmdInfo.onResult(new BblrDisconnectedBeforeError(), undefined, cmdInfo.cmd, cmdInfo.params);
+            });
             // остальных тоже известим, что команда так и не ушла из очереди
             this.emit(
                BabblerEvent.DATA_ERROR, 
@@ -904,14 +978,22 @@ function Babbler(options) {
         // ставим статус, очищаем ресурсы
         _disconnect(err);
         
-        // закрываем порт
-        if(dev != undefined && dev.ready()) {
-            dev.close(function(err) {
-                // ошибки ловим, но игнорируем
-                //console.log(err);
-            });
+        if(devOpening) {
+            // устройство не успело отправить колбэк
+            // с результатом open - здесь не будем
+            // его закрывать (все равно, не получится), 
+            // а дождемся колбэка
+            devOpening = false;
+        } else {
+            // закрываем порт
+            if(dev != undefined && dev.ready()) {
+                dev.close(function(_err) {
+                    // ошибки ловим, но игнорируем
+                    //console.log(_err);
+                });
+            }
+            dev = undefined;
         }
-        dev = undefined;
     }
     
     /**
@@ -939,26 +1021,29 @@ function Babbler(options) {
                 params: params,
                 id: nextCmdId.toString()
             });
-            dev.write(data,
-                function(err) {
-                    if(!err) {
-                        // данные ушли ок
-                        this.emit(BabblerEvent.DATA, data, DataFlow.OUT);
-                    } else {
-                        // ошибка записи в порт 
-                        // (например, порт открыт, но не хватает прав на запись)
-                        this.emit(
-                            BabblerEvent.DATA_ERROR, 
-                            data, 
-                            DataFlow.OUT, 
-                            new BblrPortWriteError(BBLR_ERROR_WRITING_TO_PORT + ": " + err));
-                        // отключаемся
-                        this.disconnect(new BblrPortWriteError(BBLR_ERROR_WRITING_TO_PORT + ": " + err));
-                        // персональная ошибка в onResult прилетит из _disconnect
-                        //onResult(new BblrPortWriteError(BBLR_ERROR_WRITING_TO_PORT + ": " + err), undefined, cmd, params);
+            dev.write(data, function(err) {
+                if(!err) {
+                    // данные ушли ок
+                    this.emit(BabblerEvent.DATA, data, DataFlow.OUT);
+                } else {
+                    // ошибка записи в порт 
+                    // (например, порт открыт, но не хватает прав на запись)
+                    this.emit(
+                        BabblerEvent.DATA_ERROR, 
+                        data, 
+                        DataFlow.OUT, 
+                        new BblrPortWriteError(BBLR_ERROR_WRITING_TO_PORT + ": " + err));
+                        
+                    // персональная ошибка в onResult
+                    // убираем только что добавленный колбэк с onResult 
+                    // из очереди ожидания ответа
+                    cmdResultCallbackQueue.pop();
+                    // отправим ответ тому, кто вопрошал
+                    if(onResult != undefined) {
+                        onResult(new BblrPortWriteError(BBLR_ERROR_WRITING_TO_PORT + ": " + err), undefined, cmd, params);
                     }
-                }.bind(this)
-            );
+                }
+            }.bind(this));
         } else {
             // порт вообще-то не открыт или устройство отключено
             // (вообще, это не должно произойти, т.к. мы ловим событие dev 'disconnect')
@@ -1052,7 +1137,7 @@ function Babbler(options) {
             // запомним, была ли очередь переполнена
             var queueWasFull = !this.queueReady;
             
-            // извлекаем команду из очереди
+            // извлекаем первую команду из очереди
             var cmd = cmdQueue.shift();
             if(cmd != undefined) {
                 _writeCmd(cmd.cmd, cmd.params, cmd.onResult);
@@ -1234,6 +1319,7 @@ Babbler.BblrDiscardedError = BblrDiscardedError;
 Babbler.BblrAlreadyConnectedError = BblrAlreadyConnectedError;
 Babbler.BblrInvalidPortNameError = BblrInvalidPortNameError;
 Babbler.BblrDeviceUnpluggedError = BblrDeviceUnpluggedError;
+Babbler.BblrCancelOpenError = BblrCancelOpenError;
 Babbler.BblrHandshakeFailError = BblrHandshakeFailError;
 
 
