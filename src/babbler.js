@@ -897,12 +897,12 @@ function Babbler(options) {
                                 } else {
                                     // другая ошибка отправки команды - прекращаем пробовать
                                     // обновим статус
-                                    this.disconnect(new BblrHandshakeFailError(err));
+                                    this.disconnect(new BblrHandshakeFailError(err.toString()));
                                     
                                     // прямой колбэк из connect - неудачное подключение
                                     if(callback && !callback.called) {
                                         callback.called = true;
-                                        callback(new BblrHandshakeFailError(err));
+                                        callback(new BblrHandshakeFailError(err.toString()));
                                     }
                                 }
                             } else {
