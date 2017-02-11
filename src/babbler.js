@@ -294,8 +294,12 @@ const BBLR_CMD_PING = "ping";
 /**
  * Настройки системы взаимодействия с устройством Babbler.
  * @typedef {Object} babblerOptions
- * @property {number} [queueLimit=5] - максимальное количество элементов в очереди
- *     команд, 0 - без ограничения
+ * @property {number} [options.replyTimeout=5000] - максимальное время ответа на команду от устройства,
+ *     по истечении этого времени команда считается не выполненной и получает ошибку BblrReplyTimeoutError.
+ * @property {number} [options.validatePeriod=1000] - период проверки зависших запросов.
+ * @property {number} [options.queueLimit=5] - максимальное количество элементов в очереди команд, 
+ *     0 - без ограничения.
+ * @property {number} [options.dequeuePeriod=200] - период период выборки команд из очереди на отправку.
  */
  
 /**
@@ -506,11 +510,19 @@ inherits(BabblerFakeDevice, EventEmitter);
  * - заглушка-симуляция для тестов.
  * 
  * @param {module:babbler-js~babblerOptions=} options - настройки системы взаимодействия:
- * @param {number} [options.queueLimit=5] - максимальное количество элементов в очереди
- *     команд, 0 - без ограничения
+ * @param {number} [options.replyTimeout=5000] - максимальное время ответа на команду от устройства,
+ *     по истечении этого времени команда считается не выполненной и получает ошибку BblrReplyTimeoutError.
+ * @param {number} [options.validatePeriod=1000] - период проверки зависших запросов.
+ * @param {number} [options.queueLimit=5] - максимальное количество элементов в очереди команд, 
+ *     0 - без ограничения.
+ * @param {number} [options.dequeuePeriod=200] - период период выборки команд из очереди на отправку.
  */
 function Babbler(options) {
     //http://phrogz.net/js/classes/OOPinJS.html
+    
+    if(!options) {
+        options = {};
+    }
     
     ///////////////////////////////////////////
     // Статус
@@ -542,17 +554,33 @@ function Babbler(options) {
     var dev = undefined;
     var devOpening = false;
     
+    /**
+     * Максимальное время ответа на команду от устройства,
+     * по истечении этого времени команда считается не выполненной
+     * и получает ошибку BblrReplyTimeoutError.
+     */
+    var _replyTimeout = (options.replyTimeout != undefined) ? 
+        options.replyTimeout : BBLR_REPLY_TIMEOUT_MILLIS;
+    
+    /** Период проверки зависших запросов */
+    var _validatePeriod = (options.validatePeriod != undefined) ? 
+        options.validatePeriod : BBLR_VALIDATE_REPLY_CALLBACKS_PERIOD;
+    
     /** 
      * Очередь команд на отправку 
      * {module:babbler-js~cmdInfo}
      */
     var cmdQueue = [];
     
+    /** Период период выборки команд из очереди на отправку */
+    var _dequeuePeriod = (options.dequeuePeriod != undefined) ? 
+        options.dequeuePeriod : BBLR_DEQUEUE_PERIOD;
+    
     /** 
-     * Максимальное количество элементов в очереди
-     * команд, 0 - без ограничения
+     * Максимальное количество элементов в очереди команд,
+     * 0 - без ограничения
      */
-    var _queueLimit = (options != undefined && options.queueLimit != undefined) ? 
+    var _queueLimit = (options.queueLimit != undefined) ? 
         options.queueLimit : BBLR_QUEUE_LIMIT;
     
     /**
@@ -593,7 +621,7 @@ function Babbler(options) {
         var toRemove = [];
         for(var i in cmdResultCallbackQueue) {
             var callbackInfo = cmdResultCallbackQueue[i];
-            if(Date.now() - callbackInfo.timestamp > BBLR_REPLY_TIMEOUT_MILLIS) {
+            if(Date.now() - callbackInfo.timestamp > _replyTimeout) {
                 toRemove.push(callbackInfo);
             }
         }
@@ -848,7 +876,7 @@ function Babbler(options) {
                 // как примем ответ на первый пинг
                 
                 // прочищаем зависшие запросы раз в секунду
-                validateIntId = setInterval(_validateReplyCallbacks, BBLR_VALIDATE_REPLY_CALLBACKS_PERIOD);
+                validateIntId = setInterval(_validateReplyCallbacks, _validatePeriod);
                 
                 pingCount = 0;
                 
@@ -886,7 +914,7 @@ function Babbler(options) {
                                 
                                 // отправлять команду на устройство раз в 200 миллисекунд (5 раз в секунду)
                                 // (на 100 миллисекундах команды начинают склеиваться)
-                                dequeueIntId = setInterval(_dequeueCmd, BBLR_DEQUEUE_PERIOD);
+                                dequeueIntId = setInterval(_dequeueCmd, _dequeuePeriod);
                                 
                                 // проверять статус устройства раз в 5 секунд
                                 // (при подключении через последовательный порт - это излишество,

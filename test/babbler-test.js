@@ -371,7 +371,8 @@ exports.ConnectionLifecycle = {
         test.expect(2);
         
         var Babbler = require('../src/babbler');
-        var babbler = new Babbler();
+        // таймаут на ответ поменьше, чтобы тесты проходили побыстрее
+        var babbler = new Babbler({replyTimeout: 100});
         var dev = new BabblerFakeDevice("/dev/ttyUSB0");
         // к устройству можно подключиться, но оно не отправляет
         // ответы на команды
@@ -587,8 +588,21 @@ exports.ConnectionLifecycle = {
         // сколько будет тестов
         test.expect(7);
         
+        // таймауты и задержки для реального устройства
+//        var replyTimeout = 5000;
+//        var validatePeriod = 1000;
+//        var delayToFail = 6000;
+//        var delayForOk = 3000;
+        
+        // таймауты и задержки поменьше, чтобы тесты проходили побыстрее
+        var replyTimeout = 500;
+        var validatePeriod = 100;
+        var delayToFail = 600;
+        var delayForOk = 300;
+        
+        //
         var Babbler = require('../src/babbler');
-        var babbler = new Babbler();
+        var babbler = new Babbler({replyTimeout: replyTimeout, validatePeriod});
         var dev = new BabblerFakeDevice("/dev/ttyUSB0");
         
         var expectReplyTimeoutTrue = false;
@@ -617,7 +631,7 @@ exports.ConnectionLifecycle = {
             // отправим команду, которая будет выполняться дольше
             // 5ти секунд (те вылетит за пределы таймаута)
             expectReplyTimeoutTrue = true;
-            babbler.sendCmd("delay", ["6000"],
+            babbler.sendCmd("delay", [delayToFail.toString()],
                 // onResult
                 function(err, reply, cmd, params) {
                     test.ok(err instanceof Babbler.BblrReplyTimeoutError,
@@ -629,7 +643,7 @@ exports.ConnectionLifecycle = {
             // отправим ту же команду, только с маленьким таймаутом, - 
             // убедимся, что придет ответ без ошибки
             expectReplyTimeoutFalse = true;
-            babbler.sendCmd("delay", ["3000"],
+            babbler.sendCmd("delay", [delayForOk.toString()],
                 // onResult
                 function(err, reply, cmd, params) {
                     test.equal(err, undefined, "No errors: " + err);
