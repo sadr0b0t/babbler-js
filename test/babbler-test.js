@@ -366,6 +366,33 @@ exports.ConnectionLifecycle = {
         });
     },
     
+    "Babbler.connect callback - handshake (first ping) timeout": function(test) {
+        // сколько будет тестов
+        test.expect(2);
+        
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
+        var dev = new BabblerFakeDevice("/dev/ttyUSB0");
+        // к устройству можно подключиться, но оно не отправляет
+        // ответы на команды
+        dev.write = function(data, callback) {
+        }
+        
+        // подключаемся к устройству - ожидаем прямой колбэк
+        // на удачное подключение или ошибку
+        
+        // неудачное подключение - таймаут подключения
+        // (устройство есть, доступно для записи, но не присылает ответ на ping)
+        babbler.connect(portName, {dev:dev, retryCount: 3}, function(err) {
+            test.ok(true, "Got callback for: " + portName);
+            test.ok(err instanceof Babbler.BblrHandshakeFailError,
+                "Not connected with error: " + err);
+            
+            // закончили здесь
+            test.done();
+        });
+    },
+    
     "Babbler.connect callback - cancel connection immediately": function(test) {
         // сколько будет тестов
         test.expect(2);

@@ -681,6 +681,8 @@ function Babbler(options) {
         if(options instanceof Function) {
             callback = options;
             options = {};
+        } else if(!options) {
+            options = {};
         }
         
         // прямой колбэк вызываем только один раз
@@ -719,7 +721,7 @@ function Babbler(options) {
         
         // Выбор устройства по префиксу portName
         if(portName.startsWith("test:")) {
-            if(options != undefined && options.dev != undefined) {
+            if(options.dev != undefined) {
                 dev = options.dev;
             } else {
                 dev = new BabblerFakeDevice(portName.substring("test:".length), options);
@@ -848,14 +850,19 @@ function Babbler(options) {
                 // прочищаем зависшие запросы раз в секунду
                 validateIntId = setInterval(_validateReplyCallbacks, BBLR_VALIDATE_REPLY_CALLBACKS_PERIOD);
                 
-                // отправляем пинг напрямую, а не через очередь команд, т.к. 
+                pingCount = 0;
+                
+                // отправляем пинг напрямую, а не через очередь команд, т.к.
                 // очередь в этот момент все равно пустая и не работает
                 var firstPing = function() {
+                    pingCount++;
                     _writeCmd(/*cmd*/ "ping", /*params*/ [],
                         // onResult
                         function(err, reply, cmd, params) {
                             if(err) {
-                                if(_deviceStatus === DeviceStatus.CONNECTING && err instanceof BblrReplyTimeoutError) {
+                                if(_deviceStatus === DeviceStatus.CONNECTING && 
+                                      err instanceof BblrReplyTimeoutError &&
+                                      (options.retryCount ? pingCount <= options.retryCount : true)) {
                                     // превышено время ожидаения ответа - пробуем еще раз до
                                     // тех пор, пока не подключимся или не отменим попытки
                                     firstPing();
