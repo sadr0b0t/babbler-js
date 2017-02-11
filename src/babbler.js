@@ -878,7 +878,7 @@ function Babbler(options) {
                 // прочищаем зависшие запросы раз в секунду
                 validateIntId = setInterval(_validateReplyCallbacks, _validatePeriod);
                 
-                pingCount = 0;
+                var pingCount = 0;
                 
                 // отправляем пинг напрямую, а не через очередь команд, т.к.
                 // очередь в этот момент все равно пустая и не работает
