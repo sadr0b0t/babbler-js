@@ -972,7 +972,7 @@ function Babbler(options) {
         
         // ожидающие ответа - возвращаем ошибки
         // сначала очистим очередь
-        cmdResultCallbackQueueOld = cmdResultCallbackQueue;
+        var cmdResultCallbackQueueOld = cmdResultCallbackQueue;
         cmdResultCallbackQueue = [];
         for(var i in cmdResultCallbackQueueOld) {
             var callbackInfo = cmdResultCallbackQueueOld[i];
@@ -981,16 +981,18 @@ function Babbler(options) {
                 callbackInfo.onResult(new BblrDisconnectedAfterError(), undefined, callbackInfo.cmd, callbackInfo.params);
             });
             // остальных тоже известим, что ответа не дождемся
-            this.emit(
-                BabblerEvent.DATA_ERROR, 
-                JSON.stringify({cmd: callbackInfo.cmd, params: callbackInfo.params, id: callbackInfo.id}), 
-                DataFlow.IN,
-                new BblrDisconnectedAfterError());
+            process.nextTick(function() {
+                this.emit(
+                    BabblerEvent.DATA_ERROR, 
+                    JSON.stringify({cmd: callbackInfo.cmd, params: callbackInfo.params, id: callbackInfo.id}), 
+                    DataFlow.IN,
+                    new BblrDisconnectedAfterError());
+            }.bind(this));
         }
         
         // обнуляем команды в очереди на отправку -
         // сначала почистим очередь
-        cmdQueueOld = cmdQueue;
+        var cmdQueueOld = cmdQueue;
         cmdQueue = [];
         // потом возвращаем ошибки
         for(var i in cmdQueueOld) {
@@ -1000,11 +1002,13 @@ function Babbler(options) {
                 cmdInfo.onResult(new BblrDisconnectedBeforeError(), undefined, cmdInfo.cmd, cmdInfo.params);
             });
             // остальных тоже известим, что команда так и не ушла из очереди
-            this.emit(
-                BabblerEvent.DATA_ERROR, 
-                JSON.stringify({cmd: cmdInfo.cmd, params: cmdInfo.params}), 
-                DataFlow.QUEUE,
-                new BblrDisconnectedBeforeError());
+            process.nextTick(function() {
+                this.emit(
+                    BabblerEvent.DATA_ERROR, 
+                    JSON.stringify({cmd: cmdInfo.cmd, params: cmdInfo.params}), 
+                    DataFlow.QUEUE,
+                    new BblrDisconnectedBeforeError());
+            }.bind(this));
         }
     }.bind(this);
     
