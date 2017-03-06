@@ -665,6 +665,84 @@ exports.ConnectionLifecycle = {
         babbler.connect("test:/dev/ttyUSB0", {dev: dev});
     },
     
+    "Disconnect device with commands in queue": function(test) {
+        // сколько будет тестов
+        test.expect(13);
+        
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
+        
+        // мы должны завершить тест после 4го обратного вызова:
+        // 2 вызова - по одному прямому колбэку на команду, 
+        // плюс 2 события DATA_ERROR
+        // тк. порядок вызовов правилами не определен, добавим счетчик
+        var callbackCounter = 4;
+        
+        babbler.on("data_error", function(data, dir, err) {
+            // здесь ожидаем 2 вызова
+            test.equal(dir, Babbler.DataFlow.QUEUE, "Data error: dir==QUEUE");
+            test.ok(err instanceof Babbler.BblrDisconnectedBeforeError,
+                "Cmd should fail with BblrDisconnectedBeforeError error: " + err);
+                
+            // очередь команд должна быть пуста
+            test.equal(babbler.queueLength, 0, "Queue should be empty on disconnect");
+            
+            // закончили, если это последний колбэк
+            callbackCounter--;
+            if(callbackCounter === 0) {
+                test.done();
+            }
+        });
+        
+        babbler.on('connected', function() {
+            test.ok(true, "Connected ok");
+            
+            // отправим пару команд, которые вернут результат не сразу
+            // (чтобы точно повисели в очереди)
+            expectReplyTimeoutTrue = true;
+            babbler.sendCmd("delay", ["1000"],
+                // onResult
+                function(err, reply, cmd, params) {
+                    test.ok(err instanceof Babbler.BblrDisconnectedBeforeError,
+                        "Cmd should fail with BblrDisconnectedBeforeError error: " + err);
+                    test.equal(reply, undefined, "And reply is 'undefined'");
+                    
+                    // очередь команд должна быть пуста
+                    test.equal(babbler.queueLength, 0, "Queue should be empty on disconnect");
+                    
+                    // закончили, если это последний колбэк
+                    callbackCounter--;
+                    if(callbackCounter === 0) {
+                        test.done();
+                    }
+                }
+            );
+            babbler.sendCmd("delay", ["1000"],
+                // onResult
+                function(err, reply, cmd, params) {
+                    test.ok(err instanceof Babbler.BblrDisconnectedBeforeError,
+                        "Cmd should fail with BblrDisconnectedBeforeError error: " + err);
+                    test.equal(reply, undefined, "And reply is 'undefined'");
+                    
+                    // очередь команд должна быть пуста
+                    test.equal(babbler.queueLength, 0, "Queue should be empty on disconnect");
+                    
+                    // закончили, если это последний колбэк
+                    callbackCounter--;
+                    if(callbackCounter === 0) {
+                        test.done();
+                    }
+                }
+            );
+            
+            // сразу отключаемся (обе команды еще должны быть в очереди)
+            babbler.disconnect();
+        });
+        
+        // подключаемся к устройству - ожидаем колбэки
+        babbler.connect("test:/dev/ttyUSB0");
+    },
+    
     "Manage queue": function(test) {
         // сколько будет тестов
         test.expect(17);
