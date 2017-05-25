@@ -20,6 +20,10 @@ function BabblerFakeDevice(name, options) {
     this.plugged = true;
     this.opened = false;
     
+    // просто свойства
+    var _name = "Babbler fake device";
+    var _manufacturer = "sadr0b0t";
+    
     var _error = function(error, callback) {
         if (callback) {
             callback(error);
@@ -85,7 +89,7 @@ function BabblerFakeDevice(name, options) {
             if(cmd.cmd === "ping") {
                 reply = "ok";
             } else if(cmd.cmd === "help") {
-                reply = "ping help delay";
+                reply = "ping help delay name manufacturer";
             } else if(cmd.cmd === "delay") {
                 // долгая команда
                 if(cmd.params != undefined && cmd.params.length > 0) {
@@ -94,6 +98,10 @@ function BabblerFakeDevice(name, options) {
                     delay = 6000;
                 }
                 reply = "ok";
+            } else if(cmd.cmd === "name") {
+                reply = _name;
+            } else if(cmd.cmd === "manufacturer") {
+                reply = _manufacturer;
             }
             
             var replyPack = JSON.stringify({
@@ -111,13 +119,18 @@ function BabblerFakeDevice(name, options) {
         }
     }
     
-    // симуляция выдернутого шнура
+    // симуляция выдернутого шнура (для тестов)
     this.unplug = function() {
         setTimeout(function() {
             this.plugged = false;
             this.close();
             this.emit('disconnect');
         }.bind(this), 10);
+    }
+    
+    // установить новое значение свойства name (для тестов)
+    this.setName = function(name) {
+       _name = name;
     }
 }
 inherits(BabblerFakeDevice, EventEmitter);
@@ -834,6 +847,101 @@ exports.ConnectionLifecycle = {
         
         babbler.on('disconnected', function(err) {
             console.log("disconnected: " + err);
+            // закончили здесь
+            test.done();
+        });
+        
+        // подключаемся к устройству - ожидаем колбэки
+        babbler.connect("test:/dev/ttyUSB0", {dev: dev});
+    },
+    
+    "Test sticked props": function(test) {
+        // сколько будет тестов
+        test.expect(7);
+        
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
+        
+        // "клеим" свойства
+        babbler.stickProp("name", "name", []);
+        babbler.stickProp("manufacturer", "manufacturer", []);
+        
+        // несуществующее свойство
+        test.equals(babbler.getStickedProp("namez"), undefined, "Device prop 'namez' was not defined");
+        
+        // значения не определены, пока не подключились
+        test.equals(babbler.getStickedProp("name").val, undefined, "Device prop 'name' has no value yet");
+        test.equals(babbler.getStickedProp("manufacturer").val, undefined, "Device prop 'manufacturer' has no value yet");
+        
+        var propCount = 0;
+        babbler.on('prop', function(name, err, val) {
+            propCount++;
+            test.ok(true, "Got prop: " + name + "=" + val);
+            
+            // должны получить ровно два события - по одному на свойство
+            if(propCount == 2) {
+                test.equals(babbler.getStickedProp("name").val, "Babbler fake device", "Device prop 'name' got value");
+                test.equals(babbler.getStickedProp("manufacturer").val, "sadr0b0t", "Device prop 'manufacturer' got value");
+                
+                babbler.disconnect();
+            }
+        });
+        
+        babbler.on('disconnected', function(err) {
+            // закончили здесь
+            test.done();
+        });
+        
+        // подключаемся к устройству - ожидаем колбэки
+        babbler.connect(portName);
+    },
+    
+    "Test sticked props poll": function(test) {
+        // сколько будет тестов
+        test.expect(8);
+        
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
+        var dev = new BabblerFakeDevice("/dev/ttyUSB0");
+        
+        // "клеим" свойство name, опрашиваем раз в полсекунды
+        babbler.stickProp("name", "name", [], 500);
+        
+        // значение не определено, пока не подключились
+        test.equals(babbler.getStickedProp("name").val, undefined, "Device prop 'name' has no value yet");
+        
+        var callCount = 0;
+        babbler.on('prop', function(name, err, val) {
+            callCount++;
+            if(callCount == 1) {
+                test.equals(val, "Babbler fake device", "Device prop 'name' has initial value");
+                test.equals(babbler.getStickedProp("name").val, "Babbler fake device",
+                    "Device prop 'name' has initial value (getStickedProp)");
+                
+                // меняем значение на устройстве
+                dev.setName("new fake name");
+                // сохраненное значение не поменялось до тех пор, пока не отправлена команда
+                // и не получен ответ с новым значением
+                test.equals(babbler.getStickedProp("name").val, "Babbler fake device",
+                    "Device prop 'name' still has initial value");
+            } else if(callCount == 2) {
+                test.equals(val, "new fake name", "Device prop 'name' has changed");
+                test.equals(babbler.getStickedProp("name").val, "new fake name",
+                    "Device prop 'name' has changed (getStickedProp)");
+                    
+                // еще раз поменяем значение
+                dev.setName("another new fake name");
+            } else if(callCount == 3) {
+                test.equals(val, "another new fake name", "Device prop 'name' has changed again");
+                test.equals(babbler.getStickedProp("name").val, "another new fake name",
+                    "Device prop 'name' has changed again (getStickedProp)");
+                
+                // и на этом хватит
+                babbler.disconnect();
+            }
+        });
+        
+        babbler.on('disconnected', function(err) {
             // закончили здесь
             test.done();
         });

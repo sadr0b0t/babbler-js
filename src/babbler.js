@@ -87,7 +87,12 @@ const BabblerEvent = {
      *     таймаут ответа (значит связь опять налажена - это была частная проблема
      *     какой-то команды).
      */
-    HEALTH: "health"
+    HEALTH: "health",
+    /**
+     * Новое значение "приклеенного свойства" (значения, регулярно запрашиваемые с устройства,
+     * см stickProp) или ошибка при его получении.
+     */
+    PROP: "prop"
 }
 
 // Ошибки по рекомендациям Мозилы
@@ -463,7 +468,7 @@ function BabblerFakeDevice(name, options) {
             if(cmd.cmd === "ping") {
                 reply = "ok";
             } else if(cmd.cmd === "help") {
-                reply = "ping help delay";
+                reply = "ping help delay name manufacturer";
             } else if(cmd.cmd === "delay") {
                 // долгая команда
                 if(cmd.params != undefined && cmd.params.length > 0) {
@@ -472,6 +477,10 @@ function BabblerFakeDevice(name, options) {
                     delay = 6000;
                 }
                 reply = "ok";
+            } else if(cmd.cmd === "name") {
+                reply = "Babbler fake device";
+            } else if(cmd.cmd === "manufacturer") {
+                reply = "sadr0b0t";
             }
             
             var replyPack = JSON.stringify({
@@ -1334,6 +1343,121 @@ function Babbler(options) {
             this.emit(BabblerEvent.QUEUE_READY);
         }
     }
+    
+    /////////////////////
+    /// "Приклеенные" свойства - команды для регулярного опроса устройства
+    var _stickedProps = {};
+    
+    /**
+     * "Приклеить" свойство: постоянно отправлять на устройство заданную
+     * команду (опрашивать устройство) и сохранять получаемый ответ в
+     * виде свойства (getPropVal).
+     * Если при очередном запросе значение ответа изменилось, или вместо
+     * него была получена ошибка, будет отправлено событие 'prop' с новым
+     * значением свойства или ошибкой.
+     * @param name - имя свойства
+     * @param cmd - команда для получения значения свойства с устройства
+     * @param params - параметны команды
+     * @param period - период опроса устройства (миллисекунды),
+     *     0 - запросить значение один раз при подключении.
+     *     значение по умолчанию: 0 (запросить значение один раз при подключении)
+     */
+    this.stickProp = function(name, cmd, params, period=0) {
+        _stickedProps[name] = {name: name, cmd: cmd, params: params, period: period,
+            waitReply: false, intId: 0};
+    }
+    
+    /**
+     * Получить "приклеенное" свойство устройства по имени:
+     * @param name - имя свойства
+     * @return актуальное значение свойства prop или undefined, если свойство не найдено
+     *     prop:
+     *       val - значение свойства
+     *       err - ошибка (если при получении свойства возникла ошибка)
+     */
+    this.getStickedProp = function(name) {
+        var prop = _stickedProps[name];
+        if(prop) {
+            return {val: prop.val, err: prop.err};
+        } else {
+            return undefined;
+        }
+    }
+    
+    /**
+     * Запросить значение "приклеенного" свойства с устройства.
+     * @param prop - выбранное свойство
+     */
+    var requestStickedProp = function(prop) {
+        // отправлять новый запрос только в том случае,
+        // если получили ответ на предыдущий
+        if(!prop.waitReply) {
+            prop.waitReply = true;
+            this.sendCmd(prop.cmd, prop.params,
+                // onResult
+                function(err, reply, cmd, params) {
+                    prop.waitReply = false;
+                    if(err) {
+                        // сообщим об ошибке только если она изменилась
+                        if(prop.err != err) {
+                            prop.err = err;
+                            // присылаем новую ошибку и старое значение свойства
+                            this.emit(BabblerEvent.PROP, prop.name, err, prop.val);
+                        }
+                    } else {
+                        // в любом случае сбрасываем ошибку -
+                        // на случай, если она была
+                        prop.err = undefined;
+                        
+                        // событие шлем только в том случае, если
+                        // значение свойства поменялось
+                        if(prop.val !== reply) {
+                            prop.val = reply;
+                            this.emit(BabblerEvent.PROP, prop.name, undefined, prop.val);
+                        }
+                    }
+                }.bind(this)
+            );
+        }
+    }.bind(this);
+    
+    // опрашиваем устройство только если подключены
+    this.on(Babbler.Event.CONNECTED, function() {
+        for(var propName in _stickedProps) {
+            if (_stickedProps.hasOwnProperty(propName)) {
+                var prop = _stickedProps[propName];
+                
+                if(prop.period > 0) {
+                    // небольшая хитрость - здесь приходится обернуть
+                    // контекст в дополнительную функцию с параметром prop,
+                    // т.к. если вызывать здесь setInterval напрямую,
+                    // значение переменной prop внутри setInterval получается
+                    // равно последнему значению этой переменной в цикле
+                    // (т.е. опрашиваем все время одно и то же свойство)
+                    var invokeLater = function(prop) {
+                        prop.intId = setInterval(function() {
+                            requestStickedProp(prop);
+                        }.bind(this), prop.period);
+                    }.bind(this);
+                    invokeLater(prop);
+                } else {
+                    // отправляем запрос только один раз
+                    requestStickedProp(prop);
+                }
+            }
+        }
+    });
+    
+    // перестаём опрашивать устройство, если отключились
+    this.on(Babbler.Event.DISCONNECTED, function() {
+        for(var propName in _stickedProps) {
+            if(_stickedProps.hasOwnProperty(propName)) {
+                var prop = _stickedProps[propName];
+                clearInterval(prop.intId);
+                prop.waitReply = false;
+            }
+        }
+    });
 }
 
 // наследуем Babbler от EventEmitter, чтобы
