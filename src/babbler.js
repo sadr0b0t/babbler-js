@@ -1421,6 +1421,18 @@ function Babbler(options) {
         }
     }.bind(this);
     
+    /**
+     * Отправить внеочередные запросы для получения значений всех
+     * "приклеенных" свойств.
+     */
+    this.requestStickedProps = function() {
+        for(var propName in _stickedProps) {
+            if (_stickedProps.hasOwnProperty(propName)) {
+                requestStickedProp(_stickedProps[propName]);
+            }
+        }
+    }
+    
     // опрашиваем устройство только если подключены
     this.on(Babbler.Event.CONNECTED, function() {
         for(var propName in _stickedProps) {
