@@ -948,6 +948,80 @@ exports.ConnectionLifecycle = {
         
         // подключаемся к устройству - ожидаем колбэки
         babbler.connect("test:/dev/ttyUSB0", {dev: dev});
+    },
+    
+    "Test sticked prop request": function(test) {
+        // сколько будет тестов
+        test.expect(8);
+        
+        var Babbler = require('../src/babbler');
+        var babbler = new Babbler();
+        var dev = new BabblerFakeDevice("/dev/ttyUSB0");
+        
+        // "клеим" свойство name
+        babbler.stickProp("name", "name", []);
+        
+        // значение не определено, пока не подключились
+        test.equals(babbler.getStickedProp("name").val, undefined, "Device prop 'name' has no value yet");
+        
+        var callCount = 0;
+        var gotProp = false;
+        babbler.on('prop', function(name, err, val) {
+            callCount++;
+            if(callCount == 1) {
+                test.equals(val, "Babbler fake device", "Device prop 'name' has initial value");
+                test.equals(babbler.getStickedProp("name").val, "Babbler fake device",
+                    "Device prop 'name' has initial value (getStickedProp)");
+                
+                // меняем значение на устройстве
+                dev.setName("new fake name");
+                // сохраненное значение не поменялось до тех пор, пока не отправлена команда
+                // и не получен ответ с новым значением
+                test.equals(babbler.getStickedProp("name").val, "Babbler fake device",
+                    "Device prop 'name' still has initial value");
+                
+                // запросим новое значение свойства с опечаткой в имени
+                babbler.requestStickedProp("namez", function(err, val) {
+                    test.ok(err instanceof Babbler.BblrNoSuchStickedPropError,
+                        "No such sticked prop: 'namez'");
+                });
+                
+                // запросим новое значение свойства вручную
+                babbler.requestStickedProp("name", function(err, val) {
+                    test.equals(val, "new fake name",
+                        "Device prop 'name' has changed (requestStickedProp:callback)");
+                    
+                    // не определено, что будет раньше:
+                    // колбэк requestStickedProp или событие on('prop')
+                    if(!gotProp) {
+                        gotProp = true;
+                    } else {
+                        babbler.disconnect();
+                    }
+                });
+            } else if(callCount == 2) {
+                // 2е событие от requestStickedProp
+                test.equals(val, "new fake name", "Device prop 'name' has changed");
+                test.equals(babbler.getStickedProp("name").val, "new fake name",
+                    "Device prop 'name' has changed (getStickedProp)");
+                
+                // не определено, что будет раньше:
+                // колбэк requestStickedProp или событие on('prop')
+                if(!gotProp) {
+                    gotProp = true;
+                } else {
+                    babbler.disconnect();
+                }
+            }
+        });
+        
+        babbler.on('disconnected', function(err) {
+            // закончили здесь
+            test.done();
+        });
+        
+        // подключаемся к устройству - ожидаем колбэки
+        babbler.connect("test:/dev/ttyUSB0", {dev: dev});
     }
 };
 

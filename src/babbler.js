@@ -222,6 +222,16 @@ function BblrHandshakeFailError(message) {
 BblrHandshakeFailError.prototype = Object.create(Error.prototype);
 BblrHandshakeFailError.prototype.constructor = BblrHandshakeFailError;
 
+/** Нет такого "приклеенного" свойства */
+const BBLR_ERROR_NO_SUCH_STICKED_PROP = "No such sticked prop"
+function BblrNoSuchStickedPropError(message) {
+  this.name = 'BblrNoSuchStickedPropError';
+  this.message = message || BBLR_ERROR_NO_SUCH_STICKED_PROP;
+  this.stack = (new Error()).stack;
+}
+BblrNoSuchStickedPropError.prototype = Object.create(Error.prototype);
+BblrNoSuchStickedPropError.prototype.constructor = BblrNoSuchStickedPropError;
+
 /** Команда ping */
 const BBLR_CMD_PING = "ping";
 
@@ -1388,7 +1398,7 @@ function Babbler(options) {
      * Запросить значение "приклеенного" свойства с устройства.
      * @param prop - выбранное свойство
      */
-    var requestStickedProp = function(prop) {
+    var _requestStickedProp = function(prop) {
         // отправлять новый запрос только в том случае,
         // если получили ответ на предыдущий
         if(!prop.waitReply) {
@@ -1398,7 +1408,7 @@ function Babbler(options) {
                 function(err, reply, cmd, params) {
                     prop.waitReply = false;
                     if(err) {
-                        // сообщим об ошибке только если она изменилась
+                        // сообщим об ошибке только, если она изменилась
                         if(prop.err != err) {
                             prop.err = err;
                             // присылаем новую ошибку и старое значение свойства
@@ -1422,13 +1432,58 @@ function Babbler(options) {
     }.bind(this);
     
     /**
+     * Отправить внеочередной запрос для получения значения
+     * "приклеенного" свойства.
+     * @param propName - имя свойства
+     * @param callback - обратный вызов на полученное значение или ошибку
+     *     callback:err - ошибка в процессе отправки команды
+     *     callback:val - полученное значение свойства
+     */
+    this.requestStickedProp = function(propName, callback) {
+        if (_stickedProps.hasOwnProperty(propName)) {
+            var prop = _stickedProps[propName];
+            this.sendCmd(prop.cmd, prop.params,
+                // onResult
+                function(err, reply, cmd, params) {
+                    if(err) {
+                        // сообщим об ошибке только, если она изменилась
+                        if(prop.err != err) {
+                            prop.err = err;
+                            // присылаем новую ошибку и старое значение свойства
+                            this.emit(BabblerEvent.PROP, prop.name, err, prop.val);
+                        }
+                    } else {
+                        // в любом случае сбрасываем ошибку -
+                        // на случай, если она была
+                        prop.err = undefined;
+                        
+                        // событие шлем только в том случае, если
+                        // значение свойства поменялось
+                        if(prop.val !== reply) {
+                            prop.val = reply;
+                            this.emit(BabblerEvent.PROP, prop.name, undefined, prop.val);
+                        }
+                    }
+                    if(callback) {
+                        callback(err, reply);
+                    }
+                }.bind(this)
+            );
+        } else {
+            if(callback) {
+                callback(new BblrNoSuchStickedPropError());
+            }
+        }
+    }
+    
+    /**
      * Отправить внеочередные запросы для получения значений всех
      * "приклеенных" свойств.
      */
     this.requestStickedProps = function() {
         for(var propName in _stickedProps) {
             if (_stickedProps.hasOwnProperty(propName)) {
-                requestStickedProp(_stickedProps[propName]);
+                _requestStickedProp(_stickedProps[propName]);
             }
         }
     }
@@ -1448,13 +1503,13 @@ function Babbler(options) {
                     // (т.е. опрашиваем все время одно и то же свойство)
                     var invokeLater = function(prop) {
                         prop.intId = setInterval(function() {
-                            requestStickedProp(prop);
+                            _requestStickedProp(prop);
                         }.bind(this), prop.period);
                     }.bind(this);
                     invokeLater(prop);
                 } else {
                     // отправляем запрос только один раз
-                    requestStickedProp(prop);
+                    _requestStickedProp(prop);
                 }
             }
         }
@@ -1500,6 +1555,7 @@ Babbler.BblrInvalidPortNameError = BblrInvalidPortNameError;
 Babbler.BblrDeviceUnpluggedError = BblrDeviceUnpluggedError;
 Babbler.BblrCancelOpenError = BblrCancelOpenError;
 Babbler.BblrHandshakeFailError = BblrHandshakeFailError;
+Babbler.BblrNoSuchStickedPropError = BblrNoSuchStickedPropError;
 
 
 // отправляем компонент на публику
